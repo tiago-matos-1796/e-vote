@@ -29,7 +29,8 @@ models.eVoteElection.hasMany(models.eVoteLog, {as: 'logs', timestamps: false});
 models.eVoteLog.belongsTo(models.eVoteElection, {as: 'electionLog', timestamps: false});
 
 const db = require('./models');
-db.sequelize.sync({force: true}).then(() => {
+const {router} = require("express/lib/application");
+db.sequelize.sync().then(() => {
     console.log("Synced");
 }).catch((err) => {
     console.log(`Failed to sync db: ${err.message}`);
@@ -39,9 +40,10 @@ db.sequelize.sync({force: true}).then(() => {
 app.get("/", (req, res) => {
     res.json({ message: "Hello World!" });
 });
-
+require("./routes/users.route")(app);
 // set port, listen for requests
 const PORT = process.env.PORT || 8080;
+
 app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}.`);
 });
