@@ -31,14 +31,23 @@ module.exports = (sequelize, DataTypes) => {
             type: DataTypes.STRING,
             allowNull: false,
         },
-        password: {
+        image: {
             type: DataTypes.STRING,
+            allowNull: true,
+        },
+        password: {
+            type: DataTypes.TEXT,
             allowNull: false,
         },
         auditor: {
             type: DataTypes.BOOLEAN,
             allowNull: false,
             defaultValue: false,
+        },
+        permission: {
+            type: DataTypes.ENUM('ADMIN', 'MANAGER', 'REGULAR'),
+            allowNull: false,
+            defaultValue: 'REGULAR',
         },
     },{
         sequelize,

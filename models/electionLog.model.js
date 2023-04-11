@@ -1,11 +1,11 @@
 "use strict";
 const {Model} = require('sequelize');
 module.exports = (sequelize, DataTypes) => {
-    class eVoteLog extends Model {
+    class eVoteElectionLog extends Model {
         static associate(models) {
         }
     }
-    eVoteLog.init({
+    eVoteElectionLog.init({
         id: {
             type: DataTypes.UUID,
             allowNull: false,
@@ -31,8 +31,8 @@ module.exports = (sequelize, DataTypes) => {
         },
     },{
         sequelize,
-        modelName: 'eVoteLog',
+        modelName: 'eVoteElectionLog',
         timestamps: false,
     });
-    return eVoteLog;
+    return eVoteElectionLog;
 };

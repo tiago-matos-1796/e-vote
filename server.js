@@ -25,8 +25,10 @@ models.eVoteUser.belongsToMany(models.eVoteElection, {through: models.eVoteElect
 models.eVoteElection.belongsToMany(models.eVoteUser, {through: models.eVoteElector, as: 'electors', timestamps: false});
 models.eVoteElection.hasMany(models.eVoteVote, {as: 'votes', timestamps: false});
 models.eVoteVote.belongsTo(models.eVoteElection, {as: 'election', timestamps: false});
-models.eVoteElection.hasMany(models.eVoteLog, {as: 'logs', timestamps: false});
-models.eVoteLog.belongsTo(models.eVoteElection, {as: 'electionLog', timestamps: false});
+models.eVoteElection.hasMany(models.eVoteElectionLog, {as: 'logs', timestamps: false});
+models.eVoteElectionLog.belongsTo(models.eVoteElection, {as: 'electionLogs', timestamps: false});
+models.eVoteUser.hasMany(models.eVoteInternalLog, {as: 'logs', timestamps: false});
+models.eVoteInternalLog.belongsTo(models.eVoteUser, {as: 'internalLogs', timestamps: false});
 
 const db = require('./models');
 const {router} = require("express/lib/application");

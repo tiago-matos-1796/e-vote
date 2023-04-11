@@ -14,6 +14,7 @@ db.eVoteUser = require("./user.model")(sequelize, Sequelize);
 db.eVoteElection = require("./election.model")(sequelize, Sequelize);
 db.eVoteElector = require("./elector.model")(sequelize, Sequelize);
 db.eVoteVote = require("./vote.model")(sequelize, Sequelize);
-db.eVoteLog = require("./log.model")(sequelize, Sequelize);
+db.eVoteElectionLog = require("./electionLog.model")(sequelize, Sequelize);
+db.eVoteInternalLog = require("./internalLog.model")(sequelize, Sequelize);
 
 module.exports = db;
