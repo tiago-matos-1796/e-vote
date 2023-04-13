@@ -49,6 +49,10 @@ module.exports = (sequelize, DataTypes) => {
             allowNull: false,
             defaultValue: 'REGULAR',
         },
+        token: {
+            type: DataTypes.TEXT,
+            allowNull: true,
+        },
     },{
         sequelize,
         modelName: 'eVoteUser',
