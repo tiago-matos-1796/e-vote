@@ -43,6 +43,10 @@ module.exports = (sequelize, DataTypes) => {
             type: DataTypes.TEXT,
             allowNull: false,
         },
+        signKey: {
+            type: DataTypes.TEXT,
+            allowNull: false,
+        },
     }, {
         sequelize,
         modelName: 'eVoteElection',

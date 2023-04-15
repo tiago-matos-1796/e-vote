@@ -86,9 +86,6 @@ async function changePermissions(req, res, next) {
     const token = req.body.token || req.query.token || req.headers["x-api-key"];
     const transaction = await db.sequelize.transaction();
     const admin = await db.eVoteUser.findByPk(jwt.decode(token).id)
-    if(admin.permission !== 'ADMIN') {
-        return res.status(403).send("Not allowed");
-    }
     try {
         const user = await db.eVoteUser.findByPk(id);
         const oldPermission = user.permission;
