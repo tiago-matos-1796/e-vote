@@ -7,6 +7,7 @@
   },
   "dependencies": {
     "babel-polyfill": "^6.26.0",
+    "bcrypt": "^5.1.0",
     "bluebird": "^3.7.2",
     "body-parser": "^1.20.2",
     "compression": "^1.7.4",
@@ -16,6 +17,7 @@
     "crypto": "^1.0.1",
     "debug": "~2.6.9",
     "dotenv": "^16.0.3",
+    "email-validator": "^2.0.4",
     "express": "~4.16.1",
     "helmet": "^6.1.2",
     "http-errors": "~1.6.3",
@@ -26,8 +28,10 @@
     "morgan": "~1.9.1",
     "pg": "^8.10.0",
     "pg-hstore": "^2.3.4",
+    "process": "^0.11.10",
     "pug": "2.0.0-beta11",
     "sequelize": "^6.31.0",
-    "uuid": "^9.0.0"
+    "uuid": "^9.0.0",
+    "uuid-validate": "^0.0.3"
   }
 }

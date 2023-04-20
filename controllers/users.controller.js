@@ -2,30 +2,40 @@ const db = require('../models');
 const crypto = require('crypto');
 const createError = require('http-errors');
 const jwt = require('jsonwebtoken');
-const config = process.env;
+const config = require('dotenv').config().parsed;
 const uuid = require('uuid');
+const {sequelize} = require('../models/index');
+const {QueryTypes} = require('sequelize');
+const emailValidator = require('email-validator');
+const uuidValidator = require('uuid-validate');
+const email_regex = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/gi;
+const permissions = ['ADMIN', 'MANAGER', 'AUDITOR', 'REGULAR'];
 
 // DONE
 async function register(req, res, next) {
-    const regexExp = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/gi;
     const body = req.body;
     try {
         const hash = crypto.createHash('sha512');
-        if(!regexExp.test(body.email)) {
+        if(!emailValidator.validate(body.email)) {
             return next(createError(400, `Email ${body.email} is not in correct format`));
         }
-        const username = body.email.split('@')[0];
-        const id = uuid.v1();
-        const userBody = {
-            id: id,
-            username: username,
-            email: body.email,
-            displayName: body.displayName,
-            password: hash.update(body.password, 'utf-8').digest('hex'), // TBD in frontend
-            token: jwt.sign({id: id, username: username}, process.env.JWT_SECRET), // add expiration
+        const result = await sequelize.query('SELECT * from e_vote_user WHERE email=:email;', {
+            type: QueryTypes.SELECT,
+            replacements: {email: body.email}
+        });
+
+        if(result.length > 0) {
+            return next(createError(400, `Email ${body.email} already in use`));
         }
-        const user = await db.eVoteUser.create(userBody);
-        return res.status(200).json(user);
+        const username = body.email.split('@')[0];
+        const image = body.image.length > 0 ? body.image : null;
+        const password = hash.update(body.password, 'utf-8').digest('hex');
+        const id = uuid.v1();
+        const token = jwt.sign({id: id, username: username}, config.JWT_SECRET);
+        await sequelize.query('CALL insert_user (:id, :username, :email, :display_name, :image, :password, :permission, :token);', {
+            replacements: {id: id, username: username, email: body.email, display_name: body.display_name, image: image, password: password, permission: 'REGULAR', token: token}
+        });
+        return res.status(200).json({id: id, username: username, email: body.email, display_name: body.display_name, image: image, permission: 'REGULAR', token: token});
     } catch (err) {
         throw err;
     }
@@ -36,13 +46,20 @@ async function register(req, res, next) {
 async function login(req, res, next) {
     const body = req.body;
     try {
-        const hash = crypto.createHash('sha512');
-        const user = await db.eVoteUser.findOne({where: {email: body.email, password:hash.update(body.password, 'utf-8').digest('hex')}});
-        if(!user) {
-            return next(createError(400, `Email and/or password is wrong`));
-        } else {
-            return res.status(200).json({id: user.id, email: user.email, displayName: user.displayName, username: user.username, permissions: user.permission, token: user.token});
+        if(!emailValidator.validate(body.email)) {
+            return next(createError(400, `Email ${body.email} is not in correct format`));
         }
+        const hash = crypto.createHash('sha512');
+        const password = hash.update(body.password, 'utf-8').digest('hex');
+        let user = await sequelize.query('SELECT * from e_vote_user WHERE email = :email AND password = :password', {
+            type: QueryTypes.SELECT,
+            replacements: {email: body.email, password: password}
+        });
+        if(user.length === 0) {
+            return next(createError(400, `Email and/or password is wrong`));
+        }
+        user = user[0];
+        return res.status(200).json({id: user.id, email: user.email, displayName: user.displayName, username: user.username, permissions: user.permission, token: user.token});
     } catch (err) {
         throw err;
     }
@@ -52,49 +69,89 @@ async function login(req, res, next) {
 async function update(req, res, next) {
     const id = req.params.id;
     const body = req.body;
-    const hash = crypto.createHash('sha512');
     try {
-        const user = await db.eVoteUser.update({
-            displayName: body.displayName,
-            email: body.email,
-            password: hash.update(body.password, 'utf-8').digest('hex'),
-        },
-            {
-                where: {id: id},
-            });
-        return res.status(200).json(user);
+        if(!uuidValidator(id, 1)) {
+            return next(createError(400, `id ${id} cannot be validated`));
+        }
+        if(!emailValidator.validate(body.email)) {
+            return next(createError(400, `Email ${body.email} is not in correct format`));
+        }
+        const user = await sequelize.query('SELECT * from e_vote_user WHERE id = :id', {
+            type: QueryTypes.SELECT,
+            replacements: {id: id}
+        });
+        if(user.length === 0) {
+            return next(createError(404, `User ${id} not found`));
+        }
+        const userEmail = await sequelize.query('SELECT * from e_vote_user WHERE email = :email AND NOT id = :id', {
+            type: QueryTypes.SELECT,
+            replacements: {email: body.email, id: id}
+        });
+        if(userEmail.length > 0) {
+            return next(createError(400, `Email ${body.email} already in user`));
+        }
+        const hash = crypto.createHash('sha512');
+        const password = body.password.length > 0 ? hash.update(body.password, 'utf-8').digest('hex') : user[0].password;
+        await sequelize.query('CALL update_user (:id, :email, :display_name, :password);', {
+            replacements: {id: id, email: body.email, display_name: body.display_name, password: password}
+        });
+        return res.status(200).json({id: id, email: body.email, display_name: body.display_name});
     } catch (err) {
         throw err;
     }
 }
 
-// DONE
+// TODO check if user belongs to an active election, do not delete if its the case
 async function remove(req, res, next) {
     const id = req.params.id;
     try {
-        const user = await db.eVoteUser.destroy({where: {id: id}});
-        return res.status(200).json(user);
+        if(!uuidValidator(id, 1)) {
+            return next(createError(400, `id ${id} cannot be validated`));
+        }
+        const user = await sequelize.query('SELECT * from e_vote_user WHERE id = :id', {
+            type: QueryTypes.SELECT,
+            replacements: {id: id}
+        });
+        if(user.length === 0) {
+            return next(createError(404, `User ${id} not found`));
+        }
+        await sequelize.query('CALL delete_user (:id);', {
+            replacements: {id: id}
+        });
+        return res.status(200).json(1);
     } catch (err) {
         throw err;
     }
 }
 
-// DONE
+// TEST
 async function changePermissions(req, res, next) {
     const id = req.params.id; // id of user in which permissions will be changed
     const permission = req.body.permission;
+    if(!uuidValidator(id, 1)) {
+        return next(createError(400, `id ${id} cannot be validated`));
+    }
+    if(!permissions.includes(permission)) {
+        return next(createError(400, `Permission ${permission} is not a valid permission`));
+    }
     const token = req.body.token || req.query.token || req.headers["x-api-key"];
-    const transaction = await db.sequelize.transaction();
-    const admin = await db.eVoteUser.findByPk(jwt.decode(token).id)
     try {
-        const user = await db.eVoteUser.findByPk(id);
-        const oldPermission = user.permission;
-        await db.eVoteUser.update({permission: permission}, {where: {id: id}, transaction});
-        await db.eVoteInternalLog.create({
-            description: `${user.username}: permission changed from ${oldPermission} to ${permission}`,
-            createdBy: admin.username,
-        }, {transaction});
-        await transaction.commit();
+        const admin = await sequelize.query('SELECT id, username, permission FROM e_vote_user WHERE id = :id', {
+            replacements: {id: jwt.decode(token).id}
+        });
+        const user = await sequelize.query('SELECT id, username, permission FROM e_vote_user WHERE id = :id', {
+            replacements: {id: id}
+        });
+        if(user.length === 0) {
+            return next(createError(404, `User ${id} not found`));
+        }
+        const oldPermission = user[0].permission;
+        await sequelize.query('CALL change_user_permission(:id, :permission);', {
+            replacements: {id: id, permission: permission}
+        });
+        await sequelize.query('CALL insert_internal_log(:description, :author);', {
+            replacements: {description: `${admin[0].username} changed permission of ${user[0].username} from ${oldPermission} to ${permission}`, author: admin[0].username}
+        });
         return res.status(200).json({id: id, permission: permission});
     } catch (err) {
         await transaction.rollback();
