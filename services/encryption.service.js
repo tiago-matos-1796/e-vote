@@ -1,6 +1,6 @@
 const crypto = require('crypto');
 const {Buffer} = require("buffer");
-const algorithm = 'aes-256-cbc';
+const algorithm = 'aes-128-cbc';
 
 function generateKeys(key) {
     const {publicKey, privateKey} = crypto.generateKeyPairSync('rsa', {

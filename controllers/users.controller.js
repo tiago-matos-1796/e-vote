@@ -1,4 +1,4 @@
-const db = require('../models');
+const kms = require('../utils/kms.utils');
 const crypto = require('crypto');
 const createError = require('http-errors');
 const jwt = require('jsonwebtoken');
@@ -10,6 +10,7 @@ const emailValidator = require('email-validator');
 const uuidValidator = require('uuid-validate');
 const email_regex = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/gi;
 const permissions = ['ADMIN', 'MANAGER', 'AUDITOR', 'REGULAR'];
+const encryption = require('../services/encryption.service');
 
 // DONE
 async function register(req, res, next) {
@@ -23,10 +24,13 @@ async function register(req, res, next) {
             type: QueryTypes.SELECT,
             replacements: {email: body.email}
         });
-
         if(result.length > 0) {
             return next(createError(400, `Email ${body.email} already in use`));
         }
+        if(body.password.length !== 16) {
+            return next(createError(400, `Password must have a length of 16`));
+        }
+        const keys = encryption.generateKeys(body.password);
         const username = body.email.split('@')[0];
         const image = body.image.length > 0 ? body.image : null;
         const password = hash.update(body.password, 'utf-8').digest('hex');
@@ -35,6 +39,14 @@ async function register(req, res, next) {
         await sequelize.query('CALL insert_user (:id, :username, :email, :display_name, :image, :password, :permission, :token);', {
             replacements: {id: id, username: username, email: body.email, display_name: body.display_name, image: image, password: password, permission: 'REGULAR', token: token}
         });
+        const key = await kms.insertSignature(id, keys.publicKey, keys.privateKey, keys.iv);
+        if(key.status !== 201) {
+            if(key.status === 400) {
+                return next(createError(400, `Duplicate key`));
+            }else {
+                return res.status(500).send("Error inserting user keys");
+            }
+        }
         return res.status(200).json({id: id, username: username, email: body.email, display_name: body.display_name, image: image, permission: 'REGULAR', token: token});
     } catch (err) {
         throw err;
@@ -124,7 +136,7 @@ async function remove(req, res, next) {
     }
 }
 
-// TEST
+// DONE
 async function changePermissions(req, res, next) {
     const id = req.params.id; // id of user in which permissions will be changed
     const permission = req.body.permission;
@@ -137,9 +149,11 @@ async function changePermissions(req, res, next) {
     const token = req.body.token || req.query.token || req.headers["x-api-key"];
     try {
         const admin = await sequelize.query('SELECT id, username, permission FROM e_vote_user WHERE id = :id', {
+            type: QueryTypes.SELECT,
             replacements: {id: jwt.decode(token).id}
         });
         const user = await sequelize.query('SELECT id, username, permission FROM e_vote_user WHERE id = :id', {
+            type: QueryTypes.SELECT,
             replacements: {id: id}
         });
         if(user.length === 0) {
@@ -154,7 +168,6 @@ async function changePermissions(req, res, next) {
         });
         return res.status(200).json({id: id, permission: permission});
     } catch (err) {
-        await transaction.rollback();
         throw err;
     }
 }
