@@ -29,8 +29,10 @@
     "morgan": "~1.9.1",
     "pg": "^8.10.0",
     "pg-hstore": "^2.3.4",
+    "postgres-date": "^2.1.0",
     "process": "^0.11.10",
     "pug": "2.0.0-beta11",
+    "sanitize": "^2.1.2",
     "sequelize": "^6.31.0",
     "uuid": "^9.0.0",
     "uuid-validate": "^0.0.3"
