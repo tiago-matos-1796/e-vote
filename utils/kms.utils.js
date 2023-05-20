@@ -2,6 +2,20 @@ const axios = require('axios');
 const env = process.env;
 axios.defaults.headers.common['access-token'] = env.KMS_TOKEN;
 
+async function kmsConnection() {
+    const uri = `${env.KMS_URI}keys/`;
+    try {
+        return await axios.get(uri, {
+            headers: {
+                "access-token": env.KMS_TOKEN,
+                "Content-type": "application/json"
+            }
+        });
+    } catch (err) {
+        console.log("Could not connect to KMS");
+    }
+}
+
 async function insertSignature(id, publicKey, privateKey, iv) {
     const keyObj = {
         _id: id,
@@ -70,6 +84,20 @@ async function getSignaturePrivateKey(id) {
     }
 }
 
+async function getSignaturePublicKey(id) {
+    const uri = `${env.KMS_URI}keys/user/public/${id}`;
+    try {
+        return await axios.get(uri, {
+            headers: {
+                "access-token": env.KMS_TOKEN,
+                "Content-type": "application/json"
+            }
+        });
+    } catch (err) {
+        console.error(err);
+    }
+}
+
 async function updateElectionKeys(id, publicKey, privateKey, iv) {
     const uri = `${env.KMS_URI}keys/election/${id}`;
     const keyObj = {
@@ -104,10 +132,12 @@ async function deleteElectionKeys(id) {
 }
 
 module.exports = {
+    kmsConnection,
     insertSignature,
     insertElectionKeys,
     getElectionPublicKey,
     getSignaturePrivateKey,
+    getSignaturePublicKey,
     deleteElectionKeys,
     updateElectionKeys
 }
