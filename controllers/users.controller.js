@@ -8,7 +8,7 @@ const {sequelize} = require('../models/index');
 const {QueryTypes} = require('sequelize');
 const emailValidator = require('email-validator');
 const uuidValidator = require('uuid-validate');
-const email_regex = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/gi;
+const bcrypt = require('bcrypt');
 const permissions = ['ADMIN', 'MANAGER', 'AUDITOR', 'REGULAR'];
 const encryption = require('../services/encryption.service');
 
@@ -16,7 +16,6 @@ const encryption = require('../services/encryption.service');
 async function register(req, res, next) {
     const body = req.body;
     try {
-        const hash = crypto.createHash('sha512');
         if(!emailValidator.validate(body.email)) {
             return next(createError(400, `Email ${body.email} is not in correct format`));
         }
@@ -27,13 +26,16 @@ async function register(req, res, next) {
         if(result.length > 0) {
             return next(createError(400, `Email ${body.email} already in use`));
         }
-        if(body.password.length !== 16) {
-            return next(createError(400, `Password must have a length of 16`));
+        if(body.password.length < 8) {
+            return next(createError(400, `Password must have at least a length of 8`));
         }
-        const keys = encryption.generateKeys(body.password);
+        if(body.sign_key.length !== 16) {
+            return next(createError(400, `Signature key must have a length of 16`));
+        }
+        const keys = encryption.generateSignatureKeys(body.sign_key);
         const username = body.email.split('@')[0];
         const image = body.image.length > 0 ? body.image : null;
-        const password = hash.update(body.password, 'utf-8').digest('hex');
+        const password = await bcrypt.hash(body.password, 13);
         const id = uuid.v1();
         const token = jwt.sign({id: id, username: username}, config.JWT_SECRET);
         await sequelize.query('CALL insert_user (:id, :username, :email, :display_name, :image, :password, :permission, :token);', {
@@ -61,13 +63,12 @@ async function login(req, res, next) {
         if(!emailValidator.validate(body.email)) {
             return next(createError(400, `Email ${body.email} is not in correct format`));
         }
-        const hash = crypto.createHash('sha512');
-        const password = hash.update(body.password, 'utf-8').digest('hex');
-        let user = await sequelize.query('SELECT * from e_vote_user WHERE email = :email AND password = :password', {
+        let user = await sequelize.query('SELECT * from e_vote_user WHERE email = :email', {
             type: QueryTypes.SELECT,
-            replacements: {email: body.email, password: password}
+            replacements: {email: body.email}
         });
-        if(user.length === 0) {
+        const compare = await bcrypt.compare(body.password, user[0].password);
+        if(user.length === 0 || !compare) {
             return next(createError(400, `Email and/or password is wrong`));
         }
         user = user[0];
@@ -81,6 +82,11 @@ async function login(req, res, next) {
 async function update(req, res, next) {
     const id = req.params.id;
     const body = req.body;
+    const token = req.body.token || req.query.token || req.headers["x-api-key"];
+    const userId =  jwt.decode(token).id;
+    if (id !== userId) {
+        return next(createError(403, 'Access Denied'));
+    }
     try {
         if(!uuidValidator(id, 1)) {
             return next(createError(400, `id ${id} cannot be validated`));
@@ -102,8 +108,7 @@ async function update(req, res, next) {
         if(userEmail.length > 0) {
             return next(createError(400, `Email ${body.email} already in user`));
         }
-        const hash = crypto.createHash('sha512');
-        const password = body.password.length > 0 ? hash.update(body.password, 'utf-8').digest('hex') : user[0].password;
+        const password = body.password.length > 0 ? await bcrypt.hash(body.password, 13) : user[0].password;
         await sequelize.query('CALL update_user (:id, :email, :display_name, :password);', {
             replacements: {id: id, email: body.email, display_name: body.display_name, password: password}
         });
@@ -116,6 +121,11 @@ async function update(req, res, next) {
 // TODO check if user belongs to an active election, do not delete if its the case
 async function remove(req, res, next) {
     const id = req.params.id;
+    const token = req.body.token || req.query.token || req.headers["x-api-key"];
+    const userId =  jwt.decode(token).id;
+    if (id !== userId) {
+        return next(createError(403, 'Access Denied'));
+    }
     try {
         if(!uuidValidator(id, 1)) {
             return next(createError(400, `id ${id} cannot be validated`));
@@ -131,6 +141,38 @@ async function remove(req, res, next) {
             replacements: {id: id}
         });
         return res.status(200).json(1);
+    } catch (err) {
+        throw err;
+    }
+}
+
+async function show(req, res, next) {
+    const id = req.params.id;
+    const token = req.body.token || req.query.token || req.headers["x-api-key"];
+    const userId =  jwt.decode(token).id;
+    if (id !== userId) {
+        return next(createError(403, 'Access Denied'));
+    }
+    try {
+        const profile = await sequelize.query('select username, email, display_name, image from e_vote_user where id = :id;', {
+            type: QueryTypes.SELECT,
+            replacements: {id: id}
+        });
+        if(profile.length === 0) {
+            return next(createError(404, `User ${id} not found`));
+        }
+        return res.status(200).json(profile);
+    } catch (err) {
+        throw err;
+    }
+}
+
+async function showUser(req, res, next) {
+    try {
+        const users = await sequelize.query('select username, email, display_name, image from e_vote_user;', {
+            type: QueryTypes.SELECT
+        });
+        return res.status(200).json(users);
     } catch (err) {
         throw err;
     }
@@ -173,4 +215,4 @@ async function changePermissions(req, res, next) {
 }
 
 
-module.exports = {register, login, update, remove, changePermissions}
+module.exports = {register, login, update, remove, show, showUser, changePermissions}
