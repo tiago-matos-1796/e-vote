@@ -1,5 +1,4 @@
 const db = require('../models');
-const crypto = require('crypto');
 const createError = require('http-errors');
 const jwt = require('jsonwebtoken');
 const config = process.env;
@@ -8,6 +7,7 @@ const {sequelize} = require('../models/index');
 const encryption = require('../services/encryption.service');
 const kms = require('../utils/kms.utils');
 const {QueryTypes} = require("sequelize");
+const uuidValidator = require('uuid-validate');
 
 async function listByVoter(req, res, next) {
     const token = req.body.token || req.query.token || req.headers["x-api-key"];
@@ -41,6 +41,9 @@ async function showBallot(req, res, next) {
     const id = req.params.id;
     const token = req.body.token || req.query.token || req.headers["x-api-key"];
     const userId =  jwt.decode(token).id;
+    if(!uuidValidator(id, 1)) {
+        return next(createError(400, `id ${id} cannot be validated`));
+    }
     try {
         const election = await sequelize.query('select * from e_vote_election eve join e_vote_candidate evc on eve.id = evc.election_id where eve.id = :id;', {
             type: QueryTypes.SELECT,
@@ -69,6 +72,9 @@ async function showBallot(req, res, next) {
 
 async function managerShow(req, res, next) {
     const id = req.params.id;
+    if(!uuidValidator(id, 1)) {
+        return next(createError(400, `id ${id} cannot be validated`));
+    }
     try {
         const electionCandidates = await sequelize.query('select * from e_vote_election eve join e_vote_candidate evc on eve.id = evc.election_id where eve.id = :id;', {
             type: QueryTypes.SELECT,
@@ -103,36 +109,103 @@ async function create(req, res, next) {
     const body = req.body;
     const token = req.body.token || req.query.token || req.headers["x-api-key"];
     const userId =  jwt.decode(token).id;
+    if(body.candidates.length === 0) {
+        return next(createError(400, `Election must have at least 1 candidate`));
+    }
+    const transaction = await sequelize.transaction();
     try {
         const keyPair = encryption.generateKeys(body.key);
         const electionId = uuid.v1();
         await sequelize.query('CALL insert_election (:id, :title, :start_date, :end_date);', {
-            replacements: {id: electionId, title: body.title, start_date: body.start_date, end_date: body.end_date}
+            replacements: {id: electionId, title: body.title, start_date: body.start_date, end_date: body.end_date},
+            transaction
         });
         await kms.insertElectionKeys(electionId, keyPair.publicKey, keyPair.publicKey, keyPair.iv);
         await sequelize.query('CALL insert_manager (:user_id, :election_id);', {
-            replacements: {user_id: userId, election_id: electionId}
+            replacements: {user_id: userId, election_id: electionId},
+            transaction
         });
         for(const candidate of body.candidates) {
             await sequelize.query('CALL insert_candidate (:id, :name, :election_id);', {
-                replacements: {id: uuid.v1(), name: candidate.name, election_id: electionId}
+                replacements: {id: uuid.v1(), name: candidate.name, election_id: electionId},
+                transaction
             });
         }
         for(const voter of body.voters) {
             await sequelize.query('CALL insert_voter (:user_id, :election_id);', {
-                replacements: {user_id: voter, election_id: electionId}
+                replacements: {user_id: voter, election_id: electionId},
+                transaction
             });
         }
+        await transaction.commit();
         return res.status(200).json(body);
     } catch (err) {
+        await transaction.rollback();
         throw err;
     }
 }
 
-async function update(req, res, next) {}
+async function update(req, res, next) {
+    const id = req.params.id;
+    const body = req.body;
+    if(!uuidValidator(id, 1)) {
+        return next(createError(400, `id ${id} cannot be validated`));
+    }
+    if(body.candidates.length === 0) {
+        return next(createError(400, `Election must have at least 1 candidate`));
+    }
+    if(body.managers.length === 0) {
+        return next(createError(400, `Election must have at least 1 manager`));
+    }
+    const transaction = await sequelize.transaction();
+    try {
+        await sequelize.query('CALL update_election (:id, :title, :startDate, :endDate, :active);', {
+            replacements: {id: id, title: body.title, startDate: body.start_date, endDate: body.end_date, active: body.active},
+            transaction
+        });
+        await sequelize.query('CALL delete_election_candidates (:id);', {
+            replacements: {id: id},
+            transaction
+        });
+        for(const candidate of body.candidates) {
+            await sequelize.query('CALL insert_candidate (:id, :name, :election_id);', {
+                replacements: {id: uuid.v1(), name: candidate.name, election_id: id},
+                transaction
+            });
+        }
+        await sequelize.query('CALL delete_election_managers (:id);', {
+            replacements: {id: id},
+            transaction
+        });
+        for(const manager of body.managers) {
+            await sequelize.query('CALL insert_manager (:user_id, :election_id);', {
+                replacements: {user_id: manager, election_id: id},
+                transaction
+            });
+        }
+        await sequelize.query('CALL delete_election_voters (:id);', {
+            replacements: {id: id},
+            transaction
+        });
+        for(const voter of body.voters) {
+            await sequelize.query('CALL insert_voter (:user_id, :election_id);', {
+                replacements: {user_id: voter, election_id: id},
+                transaction
+            });
+        }
+        await transaction.commit();
+        return res.status(200).json(body);
+    } catch (err) {
+        await transaction.rollback();
+        throw err;
+    }
+}
 
 async function remove(req, res, next) {
     const id = req.params.id;
+    if(!uuidValidator(id, 1)) {
+        return next(createError(400, `id ${id} cannot be validated`));
+    }
     try {
         await sequelize.query('CALL delete_election (:id)', {
             replacements: {id: id}
