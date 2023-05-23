@@ -70,6 +70,20 @@ async function getElectionPublicKey(id) {
     }
 }
 
+async function getElectionPrivateKey(id) {
+    const uri = `${env.KMS_URI}keys/election/private/${id}`;
+    try {
+        return await axios.get(uri, {
+            headers: {
+                "access-token": env.KMS_TOKEN,
+                "Content-type": "application/json"
+            }
+        });
+    } catch (err) {
+        console.error(err);
+    }
+}
+
 async function getSignaturePrivateKey(id) {
     const uri = `${env.KMS_URI}keys/user/private/${id}`;
     try {
@@ -117,8 +131,41 @@ async function updateElectionKeys(id, publicKey, privateKey, iv) {
     }
 }
 
+async function updateSignatureKeys(id, publicKey, privateKey, iv) {
+    const uri = `${env.KMS_URI}keys/user/${id}`;
+    const keyObj = {
+        public_key: publicKey,
+        private_key: privateKey,
+        iv: iv
+    };
+    try {
+        return await axios.patch(uri, keyObj, {
+            headers: {
+                "access-token": env.KMS_TOKEN,
+                "Content-type": "application/json"
+            }
+        });
+    } catch (err) {
+        console.error(err);
+    }
+}
+
 async function deleteElectionKeys(id) {
     const uri = `${env.KMS_URI}keys/election/${id}`;
+    try {
+        return await axios.delete(uri, {
+            headers: {
+                "access-token": env.KMS_TOKEN,
+                "Content-type": "application/json"
+            }
+        });
+    } catch (err) {
+        console.error(err);
+    }
+}
+
+async function deleteSignatureKeys(id) {
+    const uri = `${env.KMS_URI}keys/user/${id}`;
     try {
         return await axios.delete(uri, {
             headers: {
@@ -136,8 +183,11 @@ module.exports = {
     insertSignature,
     insertElectionKeys,
     getElectionPublicKey,
+    getElectionPrivateKey,
     getSignaturePrivateKey,
     getSignaturePublicKey,
     deleteElectionKeys,
-    updateElectionKeys
+    deleteSignatureKeys,
+    updateElectionKeys,
+    updateSignatureKeys
 }

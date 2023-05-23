@@ -19,6 +19,7 @@ const {router} = require("express/lib/application");
 require("./routes/users.route")(app);
 require("./routes/election.route")(app);
 require("./routes/statistics.route")(app);
+require("./routes/log.route")(app);
 // set port, listen for requests
 async function kms_connection() {
     const c = await kms.kmsConnection();
