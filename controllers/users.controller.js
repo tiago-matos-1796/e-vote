@@ -11,6 +11,7 @@ const uuidValidator = require('uuid-validate');
 const bcrypt = require('bcrypt');
 const permissions = ['ADMIN', 'MANAGER', 'AUDITOR', 'REGULAR'];
 const encryption = require('../services/encryption.service');
+const {client}  = require('../configs/cassandra');
 
 // DONE
 async function register(req, res, next) {
@@ -140,6 +141,7 @@ async function remove(req, res, next) {
         await sequelize.query('CALL delete_user (:id);', {
             replacements: {id: id}
         });
+        await kms.deleteSignatureKeys(userId);
         return res.status(200).json(1);
     } catch (err) {
         throw err;
@@ -208,11 +210,27 @@ async function changePermissions(req, res, next) {
         await sequelize.query('CALL insert_internal_log(:description, :author);', {
             replacements: {description: `${admin[0].username} changed permission of ${user[0].username} from ${oldPermission} to ${permission}`, author: admin[0].username}
         });
+        const log = 'INSERT INTO internal_log (id, creation, log) VALUES (:id, :creation, :log)';
+        const logParams = {id: uuid.v1(), creation: Date.now(), log: `${admin[0].username} changed permission of ${user[0].username} from ${oldPermission} to ${permission}`};
+        await client.execute(log, logParams, {prepare: true});
         return res.status(200).json({id: id, permission: permission});
     } catch (err) {
         throw err;
     }
 }
 
+async function regenerateKeys(req, res, next) {
+    const token = req.body.token || req.query.token || req.headers["x-api-key"];
+    const userId = jwt.decode(token).id;
+    const body = req.body;
+    try {
+        const keyPair = encryption.generateSignatureKeys(body.key);
+        await kms.updateSignatureKeys(userId, keyPair.publicKey, keyPair.privateKey, keyPair.iv);
+        return res.status(200).json(1);
+    } catch (err) {
+        throw err;
+    }
+}
 
-module.exports = {register, login, update, remove, show, showUser, changePermissions}
+
+module.exports = {register, login, update, remove, show, showUser, changePermissions, regenerateKeys}
