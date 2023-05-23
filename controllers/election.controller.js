@@ -8,6 +8,8 @@ const encryption = require('../services/encryption.service');
 const kms = require('../utils/kms.utils');
 const {QueryTypes} = require("sequelize");
 const uuidValidator = require('uuid-validate');
+const {client}  = require('../configs/cassandra');
+const moment = require("moment");
 
 async function listByVoter(req, res, next) {
     const token = req.body.token || req.query.token || req.headers["x-api-key"];
@@ -109,6 +111,7 @@ async function create(req, res, next) {
     const body = req.body;
     const token = req.body.token || req.query.token || req.headers["x-api-key"];
     const userId =  jwt.decode(token).id;
+    const username = jwt.decode(token).username;
     if(body.candidates.length === 0) {
         return next(createError(400, `Election must have at least 1 candidate`));
     }
@@ -116,8 +119,8 @@ async function create(req, res, next) {
     try {
         const keyPair = encryption.generateKeys(body.key);
         const electionId = uuid.v1();
-        await sequelize.query('CALL insert_election (:id, :title, :start_date, :end_date);', {
-            replacements: {id: electionId, title: body.title, start_date: body.start_date, end_date: body.end_date},
+        await sequelize.query('CALL insert_election (:id, :title, :start_date, :end_date, :created_at);', {
+            replacements: {id: electionId, title: body.title, start_date: body.start_date, end_date: body.end_date, created_at: moment()},
             transaction
         });
         await kms.insertElectionKeys(electionId, keyPair.publicKey, keyPair.publicKey, keyPair.iv);
@@ -138,6 +141,9 @@ async function create(req, res, next) {
             });
         }
         await transaction.commit();
+        const log = 'INSERT INTO election_log (id, creation, election_id, log, severity) VALUES (:id, :creation, :election_id, :log, :severity)';
+        const logParams = {id: uuid.v1(), creation: moment(), election_id: electionId, log: `Election ${body.title} with ID: ${electionId} has been created by user ${username}`, severity: 'NONE'};
+        await client.execute(log, logParams, {prepare: true});
         return res.status(200).json(body);
     } catch (err) {
         await transaction.rollback();
@@ -148,6 +154,8 @@ async function create(req, res, next) {
 async function update(req, res, next) {
     const id = req.params.id;
     const body = req.body;
+    const token = req.body.token || req.query.token || req.headers["x-api-key"];
+    const username = jwt.decode(token).username;
     if(!uuidValidator(id, 1)) {
         return next(createError(400, `id ${id} cannot be validated`));
     }
@@ -194,6 +202,9 @@ async function update(req, res, next) {
             });
         }
         await transaction.commit();
+        const log = 'INSERT INTO election_log (id, creation, election_id, log, severity) VALUES (:id, :creation, :election_id, :log, :severity)';
+        const logParams = {id: uuid.v1(), creation: moment(), election_id: id, log: `Election ${body.title} with ID: ${id} has been updated by user ${username}`, severity: 'NONE'};
+        await client.execute(log, logParams, {prepare: true});
         return res.status(200).json(body);
     } catch (err) {
         await transaction.rollback();
@@ -203,6 +214,8 @@ async function update(req, res, next) {
 
 async function remove(req, res, next) {
     const id = req.params.id;
+    const token = req.body.token || req.query.token || req.headers["x-api-key"];
+    const username = jwt.decode(token).username;
     if(!uuidValidator(id, 1)) {
         return next(createError(400, `id ${id} cannot be validated`));
     }
@@ -211,6 +224,9 @@ async function remove(req, res, next) {
             replacements: {id: id}
         });
         await kms.deleteElectionKeys(id);
+        const log = 'INSERT INTO election_log (id, creation, election_id, log, severity) VALUES (:id, :creation, :election_id, :log, :severity)';
+        const logParams = {id: uuid.v1(), creation: moment(), election_id: id, log: `Election with ID: ${id} has been deleted by user ${username}`, severity: 'NONE'};
+        await client.execute(log, logParams, {prepare: true});
         return res.status(200).json(1);
     } catch (err) {
         throw err;
@@ -220,9 +236,14 @@ async function remove(req, res, next) {
 async function regenerateKeys(req, res, next) {
     const id = req.params.id;
     const body = req.body;
+    const token = req.body.token || req.query.token || req.headers["x-api-key"];
+    const username = jwt.decode(token).username;
     try {
         const keyPair = encryption.generateKeys(body.key);
         await kms.updateElectionKeys(id, keyPair.publicKey, keyPair.privateKey, keyPair.iv);
+        const log = 'INSERT INTO election_log (id, creation, election_id, log, severity) VALUES (:id, :creation, :election_id, :log, :severity)';
+        const logParams = {id: uuid.v1(), creation: moment(), election_id: id, log: ` Keys have been regenerated for election with ID: ${id} by user ${username}`, severity: 'NONE'};
+        await client.execute(log, logParams, {prepare: true});
         return res.status(200).json(1);
     } catch (err) {
         throw err;
