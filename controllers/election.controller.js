@@ -167,6 +167,16 @@ async function update(req, res, next) {
     }
     const transaction = await sequelize.transaction();
     try {
+        const election = await sequelize.query('SELECT * from e_vote_election WHERE id = :id', {
+            type: QueryTypes.SELECT,
+            replacements: {id: id}
+        });
+        if(moment().isBetween(moment(election[0].start_date), moment(election[0].end_date))) {
+            return next(createError(400, `Ongoing election`));
+        }
+        if(moment().isAfter(moment(election[0].end_date))) {
+            return next(createError(400, `Election has ended`));
+        }
         await sequelize.query('CALL update_election (:id, :title, :startDate, :endDate, :active);', {
             replacements: {id: id, title: body.title, startDate: body.start_date, endDate: body.end_date, active: body.active},
             transaction
@@ -220,6 +230,16 @@ async function remove(req, res, next) {
         return next(createError(400, `id ${id} cannot be validated`));
     }
     try {
+        const election = await sequelize.query('SELECT * from e_vote_election WHERE id = :id', {
+            type: QueryTypes.SELECT,
+            replacements: {id: id}
+        });
+        if(moment().isBetween(moment(election[0].start_date), moment(election[0].end_date))) {
+            return next(createError(400, `Ongoing election`));
+        }
+        if(moment().isAfter(moment(election[0].end_date))) {
+            return next(createError(400, `Election has ended`));
+        }
         await sequelize.query('CALL delete_election (:id)', {
             replacements: {id: id}
         });
@@ -239,6 +259,16 @@ async function regenerateKeys(req, res, next) {
     const token = req.body.token || req.query.token || req.headers["x-api-key"];
     const username = jwt.decode(token).username;
     try {
+        const election = await sequelize.query('SELECT * from e_vote_election WHERE id = :id', {
+            type: QueryTypes.SELECT,
+            replacements: {id: id}
+        });
+        if(moment().isBetween(moment(election[0].start_date), moment(election[0].end_date))) {
+            return next(createError(400, `Ongoing election`));
+        }
+        if(moment().isAfter(moment(election[0].end_date))) {
+            return next(createError(400, `Election has ended`));
+        }
         const keyPair = encryption.generateKeys(body.key);
         await kms.updateElectionKeys(id, keyPair.publicKey, keyPair.privateKey, keyPair.iv);
         const log = 'INSERT INTO election_log (id, creation, election_id, log, severity) VALUES (:id, :creation, :election_id, :log, :severity)';

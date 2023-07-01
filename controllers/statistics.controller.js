@@ -19,7 +19,6 @@ async function vote(req, res, next) {
         return next(createError(400, `id ${id} cannot be validated`));
     }
     try {
-        console.log(moment());
         const hash = crypto.createHash('sha512');
         const election = await sequelize.query('SELECT * from e_vote_election WHERE id = :id', {
             type: QueryTypes.SELECT,
@@ -66,8 +65,8 @@ async function vote(req, res, next) {
         const logParams = {id: uuid.v1(), creation: moment(), election_id: id, log: `${decodedToken.username} submitted vote`, severity: 'NONE'};
         await client.execute(log, logParams, {prepare: true});
         await client.execute(query, params, {prepare: true});
-        await sequelize.query('CALL vote_submission (:voter, :election);', {
-            replacements: {voter: decodedToken.id, election: id}
+        await sequelize.query('CALL vote_submission (:voter, :election, :time);', {
+            replacements: {voter: decodedToken.id, election: id, time: moment()}
         });
         return res.status(200).json('Vote submitted with success');
     } catch (err) {
