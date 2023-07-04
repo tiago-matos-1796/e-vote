@@ -1,17 +1,6 @@
 const multer = require("multer");
 const sharpMulter = require("sharp-multer");
 
-/*const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, "files/images");
-  },
-  filename: function (req, file, cb) {
-    const fileType = file.mimetype.split("/");
-    const extension = fileType[fileType.length - 1];
-    cb(null, file.fieldname + "_" + Date.now() + "." + extension);
-  },
-});*/
-
 const avatarStorage = sharpMulter({
   destination: function (req, file, cb) {
     cb(null, "files/images/avatars");
@@ -36,7 +25,10 @@ const candidateStorage = sharpMulter({
   },
 });
 
-const uploadAvatar = multer({ storage: avatarStorage });
+const uploadAvatar = multer({
+  storage: avatarStorage,
+  limits: { fieldSize: 1048576 },
+});
 const uploadCandidateImage = multer({ storage: candidateStorage });
 
 module.exports = { uploadAvatar, uploadCandidateImage };

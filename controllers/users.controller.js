@@ -12,12 +12,19 @@ const bcrypt = require("bcrypt");
 const permissions = ["ADMIN", "MANAGER", "AUDITOR", "REGULAR"];
 const encryption = require("../services/encryption.service");
 const { client } = require("../configs/cassandra");
+const fs = require("fs");
 
 // DONE
 async function register(req, res, next) {
   const body = req.body;
+  const image = req.file ? req.file.filename : null;
   try {
     if (!emailValidator.validate(body.email)) {
+      fs.unlink(`files/images/avatars/${image}`, function (err) {
+        if (err) {
+          throw err;
+        }
+      });
       return next(
         createError(400, `Email ${body.email} is not in correct format`)
       );
@@ -30,19 +37,33 @@ async function register(req, res, next) {
       }
     );
     if (result.length > 0) {
-      return next(createError(400, `Email ${body.email} already in use`));
+      fs.unlink(`files/images/avatars/${image}`, function (err) {
+        if (err) {
+          throw err;
+        }
+      });
+      return next(createError(409, `Email ${body.email} already in use`));
     }
     if (body.password.length < 8) {
+      fs.unlink(`files/images/avatars/${image}`, function (err) {
+        if (err) {
+          throw err;
+        }
+      });
       return next(
         createError(400, `Password must have at least a length of 8`)
       );
     }
     if (body.sign_key.length !== 16) {
+      fs.unlink(`files/images/avatars/${image}`, function (err) {
+        if (err) {
+          throw err;
+        }
+      });
       return next(createError(400, `Signature key must have a length of 16`));
     }
     const keys = encryption.generateSignatureKeys(body.sign_key);
     const username = body.email.split("@")[0];
-    const image = req.file ? req.file.filename : null;
     const password = await bcrypt.hash(body.password, 13);
     const id = uuid.v1();
     const token = jwt.sign({ id: id, username: username }, config.JWT_SECRET);
@@ -69,6 +90,11 @@ async function register(req, res, next) {
     );
     if (key.status !== 201) {
       if (key.status === 400) {
+        fs.unlink(`files/images/avatars/${image}`, function (err) {
+          if (err) {
+            throw err;
+          }
+        });
         return next(createError(400, `Duplicate key`));
       } else {
         return res.status(500).send("Error inserting user keys");
@@ -84,6 +110,11 @@ async function register(req, res, next) {
       token: token,
     });
   } catch (err) {
+    fs.unlink(`files/images/avatars/${image}`, function (err) {
+      if (err) {
+        throw err;
+      }
+    });
     throw err;
   }
 }
@@ -326,6 +357,8 @@ async function regenerateKeys(req, res, next) {
   }
 }
 
+async function getAvatar(req, res, next) {}
+
 module.exports = {
   register,
   login,
@@ -335,4 +368,5 @@ module.exports = {
   showUser,
   changePermissions,
   regenerateKeys,
+  getAvatar,
 };
