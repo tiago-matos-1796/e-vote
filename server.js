@@ -7,8 +7,23 @@ const cookieParser = require("cookie-parser");
 
 const app = express();
 
-app.use(cors());
-
+app.use(
+  cors({
+    origin: "http://localhost:8000",
+    methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
+    preflightContinue: false,
+    optionsSuccessStatus: 200,
+  })
+);
+app.use(function (req, res, next) {
+  res.header("Access-Control-Allow-Origin", process.env.FRONTEND_URI); // update to match the domain you will make the request from
+  res.header(
+    "Access-Control-Allow-Headers",
+    "Origin, X-Requested-With, Content-Type, Accept"
+  );
+  res.header("Access-Control-Allow-Credentials", "true");
+  next();
+});
 // parse requests of content-type - application/json
 app.use(bodyParser.json());
 app.use(cookieParser());
@@ -22,6 +37,7 @@ require("./routes/users.route")(app);
 require("./routes/election.route")(app);
 require("./routes/statistics.route")(app);
 require("./routes/log.route")(app);
+
 // set port, listen for requests
 async function kms_connection() {
   const c = await kms.kmsConnection();
@@ -31,6 +47,7 @@ async function kms_connection() {
     }
   }
 }
+
 kms_connection();
 client.execute("SELECT NOW() FROM system.local;", function (err, result) {
   if (err) {
