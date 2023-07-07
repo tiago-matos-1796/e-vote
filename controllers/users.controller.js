@@ -140,11 +140,17 @@ async function login(req, res, next) {
       return next(createError(400, `Email and/or password is wrong`));
     }
     user = user[0];
+    let image = user.image;
+    if (image) {
+      const file = fs.readFileSync(`files/images/avatars/${image}`);
+      image = Buffer.from(file).toString("base64");
+    }
     return res.status(200).json({
       id: user.id,
       email: user.email,
       displayName: user.displayName,
       username: user.username,
+      image: image,
       permissions: user.permission,
       token: user.token,
     });
@@ -157,7 +163,7 @@ async function login(req, res, next) {
 async function update(req, res, next) {
   const id = req.params.id;
   const body = req.body;
-  const token = req.body.token || req.query.token || req.headers["x-api-key"];
+  const token = req.cookies.token;
   const userId = jwt.decode(token).id;
   if (id !== userId) {
     return next(createError(403, "Access Denied"));
@@ -217,7 +223,7 @@ async function update(req, res, next) {
 // TODO check if user belongs to an active election, do not delete if its the case
 async function remove(req, res, next) {
   const id = req.params.id;
-  const token = req.body.token || req.query.token || req.headers["x-api-key"];
+  const token = req.cookies.token;
   const userId = jwt.decode(token).id;
   if (id !== userId) {
     return next(createError(403, "Access Denied"));
@@ -248,7 +254,7 @@ async function remove(req, res, next) {
 
 async function show(req, res, next) {
   const id = req.params.id;
-  const token = req.body.token || req.query.token || req.headers["x-api-key"];
+  const token = req.cookies.token;
   const userId = jwt.decode(token).id;
   if (id !== userId) {
     return next(createError(403, "Access Denied"));
@@ -340,7 +346,7 @@ async function changePermissions(req, res, next) {
 }
 
 async function regenerateKeys(req, res, next) {
-  const token = req.body.token || req.query.token || req.headers["x-api-key"];
+  const token = req.cookies.token;
   const userId = jwt.decode(token).id;
   const body = req.body;
   try {
@@ -357,8 +363,6 @@ async function regenerateKeys(req, res, next) {
   }
 }
 
-async function getAvatar(req, res, next) {}
-
 module.exports = {
   register,
   login,
@@ -368,5 +372,4 @@ module.exports = {
   showUser,
   changePermissions,
   regenerateKeys,
-  getAvatar,
 };

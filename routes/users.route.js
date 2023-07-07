@@ -19,6 +19,5 @@ module.exports = (app) => {
   );
   router.get("/admin", auth, access(["ADMIN"]), userController.showUser);
   router.post("/key", auth, userController.regenerateKeys);
-  router.get("/avatar", auth, userController.getAvatar);
   app.use("/users", router);
 };
