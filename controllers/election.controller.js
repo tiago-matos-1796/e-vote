@@ -10,6 +10,8 @@ const { QueryTypes } = require("sequelize");
 const uuidValidator = require("uuid-validate");
 const { client } = require("../configs/cassandra");
 const moment = require("moment");
+const fs = require("fs");
+const sharp = require("sharp");
 
 async function listByVoter(req, res, next) {
   const token = req.body.token || req.query.token || req.headers["x-api-key"];
@@ -137,10 +139,20 @@ async function managerShow(req, res, next) {
 }
 async function create(req, res, next) {
   const body = req.body;
-  const token = req.body.token || req.query.token || req.headers["x-api-key"];
+  const token = req.cookies.token;
   const userId = jwt.decode(token).id;
   const username = jwt.decode(token).username;
   if (body.candidates.length === 0) {
+    for (const image of req.files) {
+      fs.unlink(
+        `files/images/candidate_images/${image.originalname}`,
+        function (err) {
+          if (err) {
+            throw err;
+          }
+        }
+      );
+    }
     return next(createError(400, `Election must have at least 1 candidate`));
   }
   const transaction = await sequelize.transaction();
@@ -153,9 +165,13 @@ async function create(req, res, next) {
         replacements: {
           id: electionId,
           title: body.title,
-          start_date: body.start_date,
-          end_date: body.end_date,
-          created_at: moment(),
+          start_date: moment(body.start_date, "YYYY-MM-DD HH:mm").format(
+            "DD-MM-YYYY HH:mm"
+          ),
+          end_date: moment(body.end_date, "YYYY-MM-DD HH:mm").format(
+            "DD-MM-YYYY HH:mm"
+          ),
+          created_at: moment().format("DD-MM-YYYY HH:mm"),
         },
         transaction,
       }
@@ -171,12 +187,42 @@ async function create(req, res, next) {
       transaction,
     });
     for (const candidate of body.candidates) {
+      const c = JSON.parse(candidate);
+      if (c.image) {
+        try {
+          const image = req.files.find((obj) => {
+            return obj.originalname === c.image;
+          });
+          const fileName = `${Date.now()}-${Math.round(Math.random() * 1e9)}_${
+            c.image
+          }`;
+          await sharp(`files/images/candidate_images/${image.originalname}`)
+            .resize(300, 300)
+            .toFormat("jpg")
+            .toFile(`files/images/candidate_images/${fileName}`);
+          fs.unlink(
+            `files/images/candidate_images/${image.originalname}`,
+            function (err) {
+              if (err) {
+                throw err;
+              }
+            }
+          );
+          c.image = fileName;
+        } catch (err) {
+          await transaction.rollback();
+          return next(
+            createError(406, `Candidate images must have unique names`)
+          );
+        }
+      }
       await sequelize.query(
-        "CALL insert_candidate (:id, :name, :election_id);",
+        "CALL insert_candidate (:id, :name, :image, :election_id);",
         {
           replacements: {
             id: uuid.v1(),
-            name: candidate.name,
+            name: c.name,
+            image: c.image ? c.image : null,
             election_id: electionId,
           },
           transaction,
@@ -194,7 +240,7 @@ async function create(req, res, next) {
       "INSERT INTO election_log (id, creation, election_id, log, severity) VALUES (:id, :creation, :election_id, :log, :severity)";
     const logParams = {
       id: uuid.v1(),
-      creation: moment(),
+      creation: moment().format("DD-MM-YYYY HH:mm"),
       election_id: electionId,
       log: `Election ${body.title} with ID: ${electionId} has been created by user ${username}`,
       severity: "NONE",

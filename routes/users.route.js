@@ -6,7 +6,6 @@ const { uploadAvatar } = require("../configs/multer");
 
 module.exports = (app) => {
   const userController = require("../controllers/users.controller");
-  router.get("/:id", auth, userController.show);
   router.post("/", uploadAvatar.single("image"), userController.register);
   router.post("/login", userController.login);
   router.put("/:id", auth, userController.update);
@@ -17,7 +16,13 @@ module.exports = (app) => {
     access(["ADMIN"]),
     userController.changePermissions
   );
-  router.get("/admin", auth, access(["ADMIN"]), userController.showUser);
+  router.get(
+    "/user-list",
+    auth,
+    access(["ADMIN", "MANAGER"]),
+    userController.showUsers
+  );
+  router.get("/:id", auth, userController.show);
   router.post("/key", auth, userController.regenerateKeys);
   app.use("/users", router);
 };

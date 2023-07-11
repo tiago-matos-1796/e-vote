@@ -13,11 +13,12 @@ const permissions = ["ADMIN", "MANAGER", "AUDITOR", "REGULAR"];
 const encryption = require("../services/encryption.service");
 const { client } = require("../configs/cassandra");
 const fs = require("fs");
+const sharp = require("sharp");
 
 // DONE
 async function register(req, res, next) {
   const body = req.body;
-  const image = req.file ? req.file.filename : null;
+  let image = req.file ? req.file.filename : null;
   try {
     if (!emailValidator.validate(body.email)) {
       fs.unlink(`files/images/avatars/${image}`, function (err) {
@@ -67,21 +68,6 @@ async function register(req, res, next) {
     const password = await bcrypt.hash(body.password, 13);
     const id = uuid.v1();
     const token = jwt.sign({ id: id, username: username }, config.JWT_SECRET);
-    await sequelize.query(
-      "CALL insert_user (:id, :username, :email, :display_name, :image, :password, :permission, :token);",
-      {
-        replacements: {
-          id: id,
-          username: username,
-          email: body.email,
-          display_name: body.display_name,
-          image: image,
-          password: password,
-          permission: "REGULAR",
-          token: token,
-        },
-      }
-    );
     const key = await kms.insertSignature(
       id,
       keys.publicKey,
@@ -100,6 +86,36 @@ async function register(req, res, next) {
         return res.status(500).send("Error inserting user keys");
       }
     }
+    if (image) {
+      const fileName = `${Date.now()}-${Math.round(
+        Math.random() * 1e9
+      )}_${image}`;
+      await sharp(`files/images/avatars/${image}`)
+        .resize(180, 180)
+        .toFormat("jpg")
+        .toFile(`files/images/avatars/${fileName}`);
+      fs.unlink(`files/images/avatars/${image}`, function (err) {
+        if (err) {
+          throw err;
+        }
+      });
+      image = fileName;
+    }
+    await sequelize.query(
+      "CALL insert_user (:id, :username, :email, :display_name, :image, :password, :permission, :token);",
+      {
+        replacements: {
+          id: id,
+          username: username,
+          email: body.email,
+          display_name: body.display_name,
+          image: image,
+          password: password,
+          permission: "REGULAR",
+          token: token,
+        },
+      }
+    );
     return res.status(200).json({
       id: id,
       username: username,
@@ -276,15 +292,35 @@ async function show(req, res, next) {
   }
 }
 
-async function showUser(req, res, next) {
+async function showUsers(req, res, next) {
   try {
-    const users = await sequelize.query(
-      "select username, email, display_name, image from e_vote_user;",
+    const token = req.cookies.token;
+    const id = jwt.decode(token).id;
+    const user = await sequelize.query(
+      "SELECT * FROM e_vote_user WHERE id = :id",
       {
         type: QueryTypes.SELECT,
+        replacements: { id: id },
       }
     );
-    return res.status(200).json(users);
+    if (user[0].permission === "ADMIN") {
+      const users = await sequelize.query(
+        "select id, username, email, display_name, image from e_vote_user;",
+        {
+          type: QueryTypes.SELECT,
+        }
+      );
+      return res.status(200).json(users);
+    }
+    if (user[0].permission === "MANAGER") {
+      const users = await sequelize.query(
+        "select id, email, display_name from e_vote_user;",
+        {
+          type: QueryTypes.SELECT,
+        }
+      );
+      return res.status(200).json(users);
+    }
   } catch (err) {
     throw err;
   }
@@ -369,7 +405,7 @@ module.exports = {
   update,
   remove,
   show,
-  showUser,
+  showUsers,
   changePermissions,
   regenerateKeys,
 };

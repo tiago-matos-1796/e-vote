@@ -4,7 +4,6 @@ const { sequelize } = require("../models/index");
 const { QueryTypes } = require("sequelize");
 const access = (permissions) => {
   return async (req, res, next) => {
-    //const token = req.body.token || req.query.token || req.headers["x-api-key"];
     const token = req.cookies.token;
     const id = jwt.decode(token).id;
     const user = await sequelize.query(
