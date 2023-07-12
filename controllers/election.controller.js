@@ -105,38 +105,63 @@ async function managerShow(req, res, next) {
       }
     );
     const electionVoters = await sequelize.query(
-      "select evu.id, evu.username, evu.email, evu.display_name, evu.image from e_vote_election eve join e_vote_voter evv on eve.id = evv.election_id inner join e_vote_user evu on evu.id = evv.user_id where eve.id = :id;",
+      "select evu.id, evu.email, evu.display_name from e_vote_election eve join e_vote_voter evv on eve.id = evv.election_id inner join e_vote_user evu on evu.id = evv.user_id where eve.id = :id;",
+      {
+        type: QueryTypes.SELECT,
+        replacements: { id: id },
+      }
+    );
+    const nonVoters = await sequelize.query(
+      "select u.id, u.display_name, u.email\n" +
+        "from e_vote_user u left join (select evu.id, evu.display_name from e_vote_election eve join e_vote_voter evv on eve.id = evv.election_id inner join e_vote_user evu on evu.id = evv.user_id where eve.id = :id) b on u.id=b.id\n" +
+        "where b.id is NULL;",
       {
         type: QueryTypes.SELECT,
         replacements: { id: id },
       }
     );
     const electionManagers = await sequelize.query(
-      "select evu.id, evu.username, evu.email, evu.display_name, evu.image from e_vote_election eve join e_vote_manager evm on eve.id = evm.election_id inner join e_vote_user evu on evu.id = evm.user_id where eve.id = :id;",
+      "select evu.id, evu.display_name, evu.email from e_vote_election eve join e_vote_manager evm on eve.id = evm.election_id inner join e_vote_user evu on evu.id = evm.user_id where eve.id = :id;",
+      {
+        type: QueryTypes.SELECT,
+        replacements: { id: id },
+      }
+    );
+    const nonManagers = await sequelize.query(
+      "select u.id, u.display_name, u.email\n" +
+        "from e_vote_user u left join (select evu.id, evu.display_name from e_vote_election eve join e_vote_manager evm on eve.id = evm.election_id inner join e_vote_user evu on evu.id = evm.user_id where eve.id = :id) b on u.id=b.id\n" +
+        "where b.id is NULL and u.permission = 'MANAGER';",
       {
         type: QueryTypes.SELECT,
         replacements: { id: id },
       }
     );
     const candidates = electionCandidates.map(function (item) {
-      return { id: item.id, name: item.name };
+      return { id: item.id, name: item.name, image: item.image };
     });
     const electionObj = {
       id: electionCandidates[0].election_id,
       title: electionCandidates[0].title,
-      start_date: electionCandidates[0].start_date,
-      end_date: electionCandidates[0].end_date,
-      created_at: electionCandidates[0].created_at,
-      active: electionCandidates[0].active,
+      startDate: moment(
+        electionCandidates[0].start_date,
+        "DD-MM-YYYY HH:mm"
+      ).format("YYYY-MM-DD HH:mm"),
+      endDate: moment(
+        electionCandidates[0].end_date,
+        "DD-MM-YYYY HH:mm"
+      ).format("YYYY-MM-DD HH:mm"),
       candidates: candidates,
       voters: electionVoters,
+      nonVoters: nonVoters,
       managers: electionManagers,
+      nonManagers: nonManagers,
     };
     return res.status(200).json(electionObj);
   } catch (err) {
     throw err;
   }
 }
+
 async function create(req, res, next) {
   const body = req.body;
   const token = req.cookies.token;
