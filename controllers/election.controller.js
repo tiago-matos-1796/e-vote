@@ -262,10 +262,10 @@ async function create(req, res, next) {
     }
     await transaction.commit();
     const log =
-      "INSERT INTO election_log (id, creation, election_id, log, severity) VALUES (:id, :creation, :election_id, :log, :severity)";
+      "INSERT INTO election_log (id, log_creation, election_id, log, severity) VALUES (:id, :log_creation, :election_id, :log, :severity)";
     const logParams = {
       id: uuid.v1(),
-      creation: moment().format("DD-MM-YYYY HH:mm"),
+      log_creation: moment().format("DD-MM-YYYY HH:mm"),
       election_id: electionId,
       log: `Election ${body.title} with ID: ${electionId} has been created by user ${username}`,
       severity: "NONE",
@@ -280,8 +280,9 @@ async function create(req, res, next) {
 
 async function update(req, res, next) {
   const id = req.params.id;
+  console.log(req.files);
   const body = req.body;
-  const token = req.body.token || req.query.token || req.headers["x-api-key"];
+  const token = req.cookies.token;
   const username = jwt.decode(token).username;
   if (!uuidValidator(id, 1)) {
     return next(createError(400, `id ${id} cannot be validated`));
@@ -382,14 +383,22 @@ async function update(req, res, next) {
 
 async function remove(req, res, next) {
   const id = req.params.id;
-  const token = req.body.token || req.query.token || req.headers["x-api-key"];
+  const token = req.cookies.token;
   const username = jwt.decode(token).username;
+  const transaction = await sequelize.transaction();
   if (!uuidValidator(id, 1)) {
     return next(createError(400, `id ${id} cannot be validated`));
   }
   try {
     const election = await sequelize.query(
       "SELECT * from e_vote_election WHERE id = :id",
+      {
+        type: QueryTypes.SELECT,
+        replacements: { id: id },
+      }
+    );
+    const candidateImages = await sequelize.query(
+      "SELECT image from e_vote_candidate WHERE election_id = :id AND image is not null",
       {
         type: QueryTypes.SELECT,
         replacements: { id: id },
@@ -406,22 +415,44 @@ async function remove(req, res, next) {
     if (moment().isAfter(moment(election[0].end_date))) {
       return next(createError(400, `Election has ended`));
     }
+    for (const image of candidateImages) {
+      fs.unlink(`files/images/candidate_images/${image.image}`, function (err) {
+        if (err) {
+          console.log(err);
+        }
+      });
+    }
+    await sequelize.query("CALL delete_election_candidates (:id)", {
+      replacements: { id: id },
+      transaction,
+    });
+    await sequelize.query("CALL delete_election_managers (:id)", {
+      replacements: { id: id },
+      transaction,
+    });
+    await sequelize.query("CALL delete_election_voters (:id)", {
+      replacements: { id: id },
+      transaction,
+    });
     await sequelize.query("CALL delete_election (:id)", {
       replacements: { id: id },
+      transaction,
     });
     await kms.deleteElectionKeys(id);
     const log =
-      "INSERT INTO election_log (id, creation, election_id, log, severity) VALUES (:id, :creation, :election_id, :log, :severity)";
+      "INSERT INTO election_log (id, log_creation, election_id, log, severity) VALUES (:id, :log_creation, :election_id, :log, :severity)";
     const logParams = {
       id: uuid.v1(),
-      creation: moment(),
+      log_creation: moment().format("DD-MM-YYYY HH:mm"),
       election_id: id,
       log: `Election with ID: ${id} has been deleted by user ${username}`,
       severity: "NONE",
     };
     await client.execute(log, logParams, { prepare: true });
+    await transaction.commit();
     return res.status(200).json(1);
   } catch (err) {
+    await transaction.rollback();
     throw err;
   }
 }
@@ -461,7 +492,7 @@ async function regenerateKeys(req, res, next) {
       "INSERT INTO election_log (id, creation, election_id, log, severity) VALUES (:id, :creation, :election_id, :log, :severity)";
     const logParams = {
       id: uuid.v1(),
-      creation: moment(),
+      log_creation: moment().format("DD-MM-YYYY HH:mm"),
       election_id: id,
       log: ` Keys have been regenerated for election with ID: ${id} by user ${username}`,
       severity: "NONE",

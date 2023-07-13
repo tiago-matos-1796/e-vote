@@ -11,7 +11,7 @@ app.use(
   cors({
     origin: "http://localhost:8000",
     methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
-    preflightContinue: false,
+    preflightContinue: true,
     optionsSuccessStatus: 200,
   })
 );
