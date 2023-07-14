@@ -27,7 +27,13 @@ module.exports = (app) => {
     uploadCandidateImage.array("images"),
     electionController.create
   );
-  router.put("/:id", auth, access(["MANAGER"]), electionController.update);
+  router.put(
+    "/:id",
+    auth,
+    access(["MANAGER"]),
+    uploadCandidateImage.array("images"),
+    electionController.update
+  );
   router.delete("/:id", auth, access(["MANAGER"]), electionController.remove);
   router.patch(
     "/:id",

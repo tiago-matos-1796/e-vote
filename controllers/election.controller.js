@@ -280,7 +280,6 @@ async function create(req, res, next) {
 
 async function update(req, res, next) {
   const id = req.params.id;
-  console.log(req.files);
   const body = req.body;
   const token = req.cookies.token;
   const username = jwt.decode(token).username;
@@ -314,34 +313,158 @@ async function update(req, res, next) {
       return next(createError(400, `Election has ended`));
     }
     await sequelize.query(
-      "CALL update_election (:id, :title, :startDate, :endDate, :active);",
+      "CALL update_election (:id, :title, :startDate, :endDate);",
       {
         replacements: {
           id: id,
           title: body.title,
-          startDate: body.start_date,
-          endDate: body.end_date,
-          active: body.active,
+          startDate: moment(body.startDate, "YYYY-MM-DD HH:mm").format(
+            "DD-MM-YYYY HH:mm"
+          ),
+          endDate: moment(body.endDate, "YYYY-MM-DD HH:mm").format(
+            "DD-MM-YYYY HH:mm"
+          ),
         },
         transaction,
       }
     );
-    await sequelize.query("CALL delete_election_candidates (:id);", {
-      replacements: { id: id },
-      transaction,
-    });
-    for (const candidate of body.candidates) {
-      await sequelize.query(
-        "CALL insert_candidate (:id, :name, :election_id);",
-        {
-          replacements: {
-            id: uuid.v1(),
-            name: candidate.name,
-            election_id: id,
-          },
-          transaction,
+    const candidates = await sequelize.query(
+      "SELECT id, image from e_vote_candidate WHERE election_id = :id",
+      {
+        type: QueryTypes.SELECT,
+        replacements: { id: id },
+      }
+    );
+    for (let candidate of body.candidates) {
+      candidate = JSON.parse(candidate);
+      if (candidate.hasOwnProperty("id")) {
+        const index = candidates.findIndex((obj) => obj.id === candidate.id);
+        if (candidate.image) {
+          if (candidates[index].image === candidate.image) {
+            await sequelize.query(
+              "CALL update_candidate (:id, :name, :image);",
+              {
+                replacements: {
+                  id: candidate.id,
+                  name: candidate.name,
+                  image: candidate.image,
+                },
+                transaction,
+              }
+            );
+            candidates.splice(index, 1);
+          } else {
+            const fileName = `${Date.now()}-${Math.round(
+              Math.random() * 1e9
+            )}_${candidate.image}`;
+            await sharp(`files/images/candidate_images/${candidate.image}`)
+              .resize(300, 300)
+              .toFormat("jpg")
+              .toFile(`files/images/candidate_images/${fileName}`);
+            fs.unlink(
+              `files/images/candidate_images/${candidate.image}`,
+              function (err) {
+                if (err) {
+                  throw err;
+                }
+              }
+            );
+            await sequelize.query(
+              "CALL update_candidate (:id, :name, :image);",
+              {
+                replacements: {
+                  id: candidate.id,
+                  name: candidate.name,
+                  image: fileName,
+                },
+                transaction,
+              }
+            );
+            if (candidates[index].image) {
+              fs.unlink(
+                `files/images/candidate_images/${candidates[index].image}`,
+                function (err) {
+                  if (err) {
+                    throw err;
+                  }
+                }
+              );
+            }
+            candidates.splice(index, 1);
+          }
+        } else {
+          if (candidates[index].image) {
+            fs.unlink(
+              `files/images/candidate_images/${candidates[index].image}`,
+              function (err) {
+                if (err) {
+                  throw err;
+                }
+              }
+            );
+          }
+          await sequelize.query("CALL update_candidate (:id, :name, :image);", {
+            replacements: {
+              id: candidate.id,
+              name: candidate.name,
+              image: candidate.image,
+            },
+            transaction,
+          });
+          candidates.splice(index, 1);
         }
-      );
+      } else {
+        if (candidate.image) {
+          const fileName = `${Date.now()}-${Math.round(Math.random() * 1e9)}_${
+            candidate.image
+          }`;
+          await sharp(`files/images/candidate_images/${candidate.image}`)
+            .resize(300, 300)
+            .toFormat("jpg")
+            .toFile(`files/images/candidate_images/${fileName}`);
+          fs.unlink(
+            `files/images/candidate_images/${candidate.image}`,
+            function (err) {
+              if (err) {
+                throw err;
+              }
+            }
+          );
+          await sequelize.query(
+            "CALL insert_candidate (:id, :name, :image, :election_id);",
+            {
+              replacements: {
+                id: uuid.v1(),
+                name: candidate.name,
+                image: fileName,
+                election_id: id,
+              },
+              transaction,
+            }
+          );
+        } else {
+          await sequelize.query(
+            "CALL insert_candidate (:id, :name, :image, :election_id);",
+            {
+              replacements: {
+                id: uuid.v1(),
+                name: candidate.name,
+                image: candidate.image,
+                election_id: id,
+              },
+              transaction,
+            }
+          );
+        }
+      }
+    }
+    for (const candidate of candidates) {
+      await sequelize.query("CALL delete_candidate (:id);", {
+        replacements: {
+          id: candidate.id,
+        },
+        transaction,
+      });
     }
     await sequelize.query("CALL delete_election_managers (:id);", {
       replacements: { id: id },
@@ -365,10 +488,10 @@ async function update(req, res, next) {
     }
     await transaction.commit();
     const log =
-      "INSERT INTO election_log (id, creation, election_id, log, severity) VALUES (:id, :creation, :election_id, :log, :severity)";
+      "INSERT INTO election_log (id, log_creation, election_id, log, severity) VALUES (:id, :log_creation, :election_id, :log, :severity)";
     const logParams = {
       id: uuid.v1(),
-      creation: moment(),
+      log_creation: moment().format("DD-MM-YYYY HH:mm"),
       election_id: id,
       log: `Election ${body.title} with ID: ${id} has been updated by user ${username}`,
       severity: "NONE",
