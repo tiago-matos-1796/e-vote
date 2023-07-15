@@ -14,16 +14,22 @@ const fs = require("fs");
 const sharp = require("sharp");
 
 async function listByVoter(req, res, next) {
-  const token = req.body.token || req.query.token || req.headers["x-api-key"];
+  const token = req.cookies.token;
   const userId = jwt.decode(token).id;
   try {
     const elections = await sequelize.query(
-      "select eve.id, eve.title, eve.start_date, eve.end_date, eve.created_at, eve.active, evv.voted from e_vote_election eve inner join e_vote_voter evv on eve.id = evv.election_id where evv.user_id = :id",
+      "select eve.id, eve.title, eve.start_date, eve.end_date, eve.created_at, eve.results, evv.voted from e_vote_election eve inner join e_vote_voter evv on eve.id = evv.election_id where evv.user_id = :id",
       {
         type: QueryTypes.SELECT,
         replacements: { id: userId },
       }
     );
+    for (const election of elections) {
+      election["startDate"] = election["start_date"];
+      delete election["start_date"];
+      election["endDate"] = election["end_date"];
+      delete election["end_date"];
+    }
     return res.status(200).json(elections);
   } catch (err) {
     throw err;
@@ -55,7 +61,7 @@ async function listByManager(req, res, next) {
 
 async function showBallot(req, res, next) {
   const id = req.params.id;
-  const token = req.body.token || req.query.token || req.headers["x-api-key"];
+  const token = req.cookies.token;
   const userId = jwt.decode(token).id;
   if (!uuidValidator(id, 1)) {
     return next(createError(400, `id ${id} cannot be validated`));
@@ -71,15 +77,16 @@ async function showBallot(req, res, next) {
     const electionPublicKey = await kms.getElectionPublicKey(id);
     const signaturePrivateKey = await kms.getSignaturePrivateKey(userId);
     const candidates = election.map(function (item) {
-      return { id: item.id, name: item.name };
+      let image = item.image;
+      if (image) {
+        const file = fs.readFileSync(`files/images/candidate_images/${image}`);
+        image = Buffer.from(file).toString("base64");
+      }
+      return { id: item.id, name: item.name, image: image };
     });
     const electionObj = {
       id: election[0].election_id,
       title: election[0].title,
-      start_date: election[0].start_date,
-      end_date: election[0].end_date,
-      created_at: election[0].created_at,
-      active: election[0].active,
       election_key: electionPublicKey.data.key,
       signature_key: signaturePrivateKey.data.key,
       signature_iv: signaturePrivateKey.data.iv,
@@ -583,7 +590,7 @@ async function remove(req, res, next) {
 async function regenerateKeys(req, res, next) {
   const id = req.params.id;
   const body = req.body;
-  const token = req.body.token || req.query.token || req.headers["x-api-key"];
+  const token = req.cookies.token;
   const username = jwt.decode(token).username;
   try {
     const election = await sequelize.query(
@@ -595,13 +602,13 @@ async function regenerateKeys(req, res, next) {
     );
     if (
       moment().isBetween(
-        moment(election[0].start_date),
-        moment(election[0].end_date)
+        moment(election[0].start_date, "DD-MM-YYYY HH:mm"),
+        moment(election[0].end_date, "DD-MM-YYYY HH:mm")
       )
     ) {
       return next(createError(400, `Ongoing election`));
     }
-    if (moment().isAfter(moment(election[0].end_date))) {
+    if (moment().isAfter(moment(election[0].end_date, "DD-MM-YYYY HH:mm"))) {
       return next(createError(400, `Election has ended`));
     }
     const keyPair = encryption.generateKeys(body.key);
@@ -612,7 +619,7 @@ async function regenerateKeys(req, res, next) {
       keyPair.iv
     );
     const log =
-      "INSERT INTO election_log (id, creation, election_id, log, severity) VALUES (:id, :creation, :election_id, :log, :severity)";
+      "INSERT INTO election_log (id, log_creation, election_id, log, severity) VALUES (:id, :log_creation, :election_id, :log, :severity)";
     const logParams = {
       id: uuid.v1(),
       log_creation: moment().format("DD-MM-YYYY HH:mm"),
