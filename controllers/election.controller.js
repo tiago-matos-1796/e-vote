@@ -12,6 +12,7 @@ const { client } = require("../configs/cassandra");
 const moment = require("moment");
 const fs = require("fs");
 const sharp = require("sharp");
+const crypto = require("crypto");
 
 async function listByVoter(req, res, next) {
   const token = req.cookies.token;
@@ -88,8 +89,7 @@ async function showBallot(req, res, next) {
       id: election[0].election_id,
       title: election[0].title,
       election_key: electionPublicKey.data.key,
-      signature_key: signaturePrivateKey.data.key,
-      signature_iv: signaturePrivateKey.data.iv,
+      hash_method: "sha512",
       candidates: candidates,
     };
     return res.status(200).json(electionObj);
@@ -634,6 +634,24 @@ async function regenerateKeys(req, res, next) {
   }
 }
 
+async function createSignature(req, res, next) {
+  const body = req.body;
+  const token = req.cookies.token;
+  const userId = jwt.decode(token).id;
+  try {
+    const signaturePrivateKey = await kms.getSignaturePrivateKey(userId);
+    const signature = encryption.sign(
+      Buffer.from(body.data),
+      signaturePrivateKey.data.key,
+      body.key,
+      signaturePrivateKey.data.iv
+    );
+    return res.status(200).json({ data: signature });
+  } catch (err) {
+    throw err;
+  }
+}
+
 module.exports = {
   listByVoter,
   listByManager,
@@ -643,4 +661,5 @@ module.exports = {
   update,
   remove,
   regenerateKeys,
+  createSignature,
 };

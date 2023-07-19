@@ -3,6 +3,7 @@ const router = express.Router();
 const auth = require("../middleware/auth.middleware");
 const { access } = require("../middleware/permission.middleware");
 const { uploadCandidateImage } = require("../configs/multer");
+const electionController = require("../controllers/election.controller");
 
 module.exports = (app) => {
   const electionController = require("../controllers/election.controller");
@@ -27,6 +28,7 @@ module.exports = (app) => {
     uploadCandidateImage.array("images"),
     electionController.create
   );
+  router.post("/signature", auth, electionController.createSignature);
   router.put(
     "/:id",
     auth,
