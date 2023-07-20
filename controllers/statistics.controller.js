@@ -124,10 +124,34 @@ async function vote(req, res, next) {
   }
 }
 
-async function showResults(req, res, next) {
+async function showStatus(req, res, next) {
+  const id = req.params.id;
+  try {
+    const voters = await sequelize.query(
+      "select evu.id, evu.email, evu.display_name, evv.voted from e_vote_voter evv inner join e_vote_user evu on evu.id = evv.user_id where evv.election_id = :id",
+      {
+        type: QueryTypes.SELECT,
+        replacements: { id: id },
+      }
+    );
+    const voted = voters.filter((x) => x.voted !== null).length;
+    const notVoted = voters.length - voted;
+    return res.status(200).json({
+      data: [
+        ["Voted", voted],
+        ["Not Voted", notVoted],
+      ],
+      voters: voters,
+    });
+  } catch (err) {
+    throw err;
+  }
+}
+
+async function countVotes(req, res, next) {
   const id = req.params.id;
   const body = req.body;
-  const token = req.body.token || req.query.token || req.headers["x-api-key"];
+  const token = req.cookies.token;
   const userId = jwt.decode(token).id;
   try {
     const query =
@@ -138,7 +162,12 @@ async function showResults(req, res, next) {
     const decryptedVotes = [];
     for (const vote of votes.rows) {
       decryptedVotes.push(
-        encryption.decrypt(vote, decryptionKey.data.key, decryptionKey.data.iv)
+        encryption.decrypt(
+          vote,
+          decryptionKey.data.key,
+          body.key,
+          decryptionKey.data.iv
+        )
       );
     }
     /*const voteCount = decryptedVotes.reduce(function (acc, curr) {
@@ -155,4 +184,6 @@ async function showResults(req, res, next) {
   }
 }
 
-module.exports = { vote, showResults };
+async function showResults(req, res, next) {}
+
+module.exports = { vote, countVotes, showStatus, showResults };
