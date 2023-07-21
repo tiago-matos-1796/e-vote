@@ -30,6 +30,7 @@ async function listByVoter(req, res, next) {
       delete election["start_date"];
       election["endDate"] = election["end_date"];
       delete election["end_date"];
+      election["results"] = election["results"] !== null;
     }
     return res.status(200).json(elections);
   } catch (err) {
@@ -42,7 +43,7 @@ async function listByManager(req, res, next) {
   const userId = jwt.decode(token).id;
   try {
     const elections = await sequelize.query(
-      "select eve.id, eve.title, eve.start_date, eve.end_date, eve.created_at from e_vote_election eve inner join e_vote_manager evm on eve.id = evm.election_id where evm.user_id = :id;",
+      "select eve.id, eve.title, eve.start_date, eve.end_date, eve.created_at, eve.results from e_vote_election eve inner join e_vote_manager evm on eve.id = evm.election_id where evm.user_id = :id;",
       {
         type: QueryTypes.SELECT,
         replacements: { id: userId },
@@ -53,6 +54,7 @@ async function listByManager(req, res, next) {
       delete election["start_date"];
       election["endDate"] = election["end_date"];
       delete election["end_date"];
+      election["results"] = election["results"] !== null;
     }
     return res.status(200).json(elections);
   } catch (err) {
@@ -76,7 +78,6 @@ async function showBallot(req, res, next) {
       }
     );
     const electionPublicKey = await kms.getElectionPublicKey(id);
-    const signaturePrivateKey = await kms.getSignaturePrivateKey(userId);
     const candidates = election.map(function (item) {
       let image = item.image;
       if (image) {
@@ -211,7 +212,7 @@ async function create(req, res, next) {
     await kms.insertElectionKeys(
       electionId,
       keyPair.publicKey,
-      keyPair.publicKey,
+      keyPair.privateKey,
       keyPair.iv
     );
     await sequelize.query("CALL insert_manager (:user_id, :election_id);", {

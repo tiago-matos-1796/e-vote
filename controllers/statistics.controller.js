@@ -9,6 +9,8 @@ const uuid = require("uuid");
 const createError = require("http-errors");
 const uuidValidator = require("uuid-validate");
 const moment = require("moment");
+const _ = require("lodash");
+const net = require("net");
 
 async function vote(req, res, next) {
   const id = req.params.id;
@@ -152,7 +154,7 @@ async function countVotes(req, res, next) {
   const id = req.params.id;
   const body = req.body;
   const token = req.cookies.token;
-  const userId = jwt.decode(token).id;
+  const username = jwt.decode(token).username;
   try {
     const query =
       "SELECT vote FROM votes WHERE election_id = :id ALLOW FILTERING";
@@ -163,27 +165,139 @@ async function countVotes(req, res, next) {
     for (const vote of votes.rows) {
       decryptedVotes.push(
         encryption.decrypt(
-          vote,
+          vote.vote,
           decryptionKey.data.key,
           body.key,
           decryptionKey.data.iv
         )
       );
     }
-    /*const voteCount = decryptedVotes.reduce(function (acc, curr) {
-            return acc[curr] ? ++acc[curr] : acc[curr] = 1, acc
-        }, {});*/
-    const voteCount = decryptedVotes.reduce(function (acc, curr) {
-      return (acc[curr] = (acc[curr] || 0) + 1);
-    }, {});
-    //const countBy = (arr, prop) => arr.reduce((prev, curr) => (prev[curr[prop]] = ++prev[curr[prop]] || 1, prev), {});
-    //const voteCount = countBy(votes.rows, 'vote');
-    return res.status(200).json(voteCount);
+    const voteCount = _.countBy(decryptedVotes);
+    const results = encryption.internalEncrypt(JSON.stringify(voteCount));
+    const log =
+      "INSERT INTO election_log (id, log_creation, election_id, log, severity) VALUES (:id, :log_creation, :election_id, :log, :severity)";
+    const logParams = {
+      id: uuid.v1(),
+      log_creation: moment().format("DD-MM-YYYY HH:mm"),
+      election_id: id,
+      log: `${username} ordered votes be counted`,
+      severity: "NONE",
+    };
+    await client.execute(log, logParams, { prepare: true });
+    await sequelize.query("CALL insert_election_results(:id, :results);", {
+      replacements: { id: id, results: results },
+    });
+    return res.status(200).send("Counted with success");
   } catch (err) {
     throw err;
   }
 }
 
-async function showResults(req, res, next) {}
+async function showResults(req, res, next) {
+  const id = req.params.id;
+  try {
+    const results = await sequelize.query(
+      "SELECT results from e_vote_election WHERE id = :id;",
+      {
+        type: QueryTypes.SELECT,
+        replacements: { id: id },
+      }
+    );
+    const candidates = await sequelize.query(
+      "SELECT id, name from e_vote_candidate WHERE election_id = :id",
+      {
+        type: QueryTypes.SELECT,
+        replacements: { id: id },
+      }
+    );
+    const voters = await sequelize.query(
+      "select evu.id, evu.email, evu.display_name, evv.voted from e_vote_voter evv inner join e_vote_user evu on evu.id = evv.user_id where evv.election_id = :id",
+      {
+        type: QueryTypes.SELECT,
+        replacements: { id: id },
+      }
+    );
+    if (!results) {
+      return next(createError(400, `Election ${id} has no results`));
+    }
+    if (!candidates) {
+      return next(createError(400, `Election ${id} has no candidates`));
+    }
+    const decryptedResults = JSON.parse(
+      encryption.internalDecrypt(Buffer.from(results[0].results, "base64"))
+    );
+    const candidateVotes = [];
+    for (const candidate of candidates) {
+      candidate["votes"] = decryptedResults[candidate.id];
+      candidateVotes.push([candidate.name, decryptedResults[candidate.id]]);
+    }
+    const voted = voters.filter((x) => x.voted !== null).length;
+    const notVoted = voters.length - voted;
+    return res.status(200).json({
+      candidates: candidates,
+      voters: voters,
+      abstention: [
+        ["Voted", voted],
+        ["Not Voted", notVoted],
+      ],
+      voteData: candidateVotes,
+    });
+  } catch (err) {
+    throw err;
+  }
+}
 
-module.exports = { vote, countVotes, showStatus, showResults };
+async function showResultsUser(req, res, next) {
+  const id = req.params.id;
+  try {
+    const results = await sequelize.query(
+      "SELECT results from e_vote_election WHERE id = :id;",
+      {
+        type: QueryTypes.SELECT,
+        replacements: { id: id },
+      }
+    );
+    const candidates = await sequelize.query(
+      "SELECT id, name from e_vote_candidate WHERE election_id = :id",
+      {
+        type: QueryTypes.SELECT,
+        replacements: { id: id },
+      }
+    );
+    const voters = await sequelize.query(
+      "select evu.id, evu.email, evu.display_name, evv.voted from e_vote_voter evv inner join e_vote_user evu on evu.id = evv.user_id where evv.election_id = :id",
+      {
+        type: QueryTypes.SELECT,
+        replacements: { id: id },
+      }
+    );
+    if (!results) {
+      return next(createError(400, `Election ${id} has no results`));
+    }
+    if (!candidates) {
+      return next(createError(400, `Election ${id} has no candidates`));
+    }
+    const decryptedResults = JSON.parse(
+      encryption.internalDecrypt(Buffer.from(results[0].results, "base64"))
+    );
+    const candidateVotes = [];
+    for (const candidate of candidates) {
+      candidate["votes"] = decryptedResults[candidate.id];
+      candidateVotes.push([candidate.name, decryptedResults[candidate.id]]);
+    }
+    const voted = voters.filter((x) => x.voted !== null).length;
+    const notVoted = voters.length - voted;
+    return res.status(200).json({
+      candidates: candidates,
+      abstention: [
+        ["Voted", voted],
+        ["Not Voted", notVoted],
+      ],
+      voteData: candidateVotes,
+    });
+  } catch (err) {
+    throw err;
+  }
+}
+
+module.exports = { vote, countVotes, showStatus, showResults, showResultsUser };

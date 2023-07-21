@@ -25,5 +25,6 @@ module.exports = (app) => {
     access(["MANAGER"]),
     statisticsController.showResults
   );
+  router.get("/results/user/:id", auth, statisticsController.showResultsUser);
   app.use("/vote", router);
 };
