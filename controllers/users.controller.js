@@ -14,6 +14,7 @@ const encryption = require("../services/encryption.service");
 const { client } = require("../configs/cassandra");
 const fs = require("fs");
 const sharp = require("sharp");
+const moment = require("moment/moment");
 
 // DONE
 async function register(req, res, next) {
@@ -305,7 +306,7 @@ async function showUsers(req, res, next) {
     );
     if (user[0].permission === "ADMIN") {
       const users = await sequelize.query(
-        "select id, username, email, display_name, image from e_vote_user;",
+        "select id, username, email, display_name, permission from e_vote_user;",
         {
           type: QueryTypes.SELECT,
         }
@@ -338,7 +339,7 @@ async function changePermissions(req, res, next) {
       createError(400, `Permission ${permission} is not a valid permission`)
     );
   }
-  const token = req.body.token || req.query.token || req.headers["x-api-key"];
+  const token = req.cookies.token;
   try {
     const admin = await sequelize.query(
       "SELECT id, username, permission FROM e_vote_user WHERE id = :id",
@@ -368,11 +369,12 @@ async function changePermissions(req, res, next) {
       },
     });
     const log =
-      "INSERT INTO internal_log (id, creation, log) VALUES (:id, :creation, :log)";
+      "INSERT INTO internal_log (id, creation, log, type) VALUES (:id, :creation, :log, :type)";
     const logParams = {
       id: uuid.v1(),
-      creation: Date.now(),
+      creation: moment().format("DD-MM-YYYY HH:mm"),
       log: `${admin[0].username} changed permission of ${user[0].username} from ${oldPermission} to ${permission}`,
+      type: "USER",
     };
     await client.execute(log, logParams, { prepare: true });
     return res.status(200).json({ id: id, permission: permission });
