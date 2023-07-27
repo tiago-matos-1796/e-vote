@@ -103,11 +103,12 @@ async function vote(req, res, next) {
       "INSERT INTO votes (id, election_id, vote) VALUES (:id, :election_id, :vote)";
     const params = { id: uuid.v1(), election_id: id, vote: body.vote };
     const log =
-      "INSERT INTO election_log (id, log_creation, election_id, log, severity) VALUES (:id, :log_creation, :election_id, :log, :severity)";
+      "INSERT INTO election_log (id, log_creation, election_id, election_title, log, severity) VALUES (:id, :log_creation, :election_id, :election_title, :log, :severity)";
     const logParams = {
       id: uuid.v1(),
       log_creation: moment().format("DD-MM-YYYY HH:mm"),
       election_id: id,
+      election_title: election[0].title,
       log: `${decodedToken.username} submitted vote`,
       severity: "NONE",
     };
@@ -156,6 +157,13 @@ async function countVotes(req, res, next) {
   const token = req.cookies.token;
   const username = jwt.decode(token).username;
   try {
+    const election = await sequelize.query(
+      "SELECT * from e_vote_election WHERE id = :id",
+      {
+        type: QueryTypes.SELECT,
+        replacements: { id: id },
+      }
+    );
     const query =
       "SELECT vote FROM votes WHERE election_id = :id ALLOW FILTERING";
     const params = { id: id };
@@ -175,11 +183,12 @@ async function countVotes(req, res, next) {
     const voteCount = _.countBy(decryptedVotes);
     const results = encryption.internalEncrypt(JSON.stringify(voteCount));
     const log =
-      "INSERT INTO election_log (id, log_creation, election_id, log, severity) VALUES (:id, :log_creation, :election_id, :log, :severity)";
+      "INSERT INTO election_log (id, log_creation, election_id, election_title, log, severity) VALUES (:id, :log_creation, :election_id, :election_title, :log, :severity)";
     const logParams = {
       id: uuid.v1(),
       log_creation: moment().format("DD-MM-YYYY HH:mm"),
       election_id: id,
+      election_title: election[0].title,
       log: `${username} ordered votes be counted`,
       severity: "NONE",
     };

@@ -12,7 +12,6 @@ const { client } = require("../configs/cassandra");
 const moment = require("moment");
 const fs = require("fs");
 const sharp = require("sharp");
-const crypto = require("crypto");
 
 async function listByVoter(req, res, next) {
   const token = req.cookies.token;
@@ -270,11 +269,12 @@ async function create(req, res, next) {
     }
     await transaction.commit();
     const log =
-      "INSERT INTO election_log (id, log_creation, election_id, log, severity) VALUES (:id, :log_creation, :election_id, :log, :severity)";
+      "INSERT INTO election_log (id, log_creation, election_id, election_title, log, severity) VALUES (:id, :log_creation, :election_id, :election_title, :log, :severity)";
     const logParams = {
       id: uuid.v1(),
       log_creation: moment().format("DD-MM-YYYY HH:mm"),
       election_id: electionId,
+      election_title: body.title,
       log: `Election ${body.title} with ID: ${electionId} has been created by user ${username}`,
       severity: "NONE",
     };
@@ -496,11 +496,12 @@ async function update(req, res, next) {
     }
     await transaction.commit();
     const log =
-      "INSERT INTO election_log (id, log_creation, election_id, log, severity) VALUES (:id, :log_creation, :election_id, :log, :severity)";
+      "INSERT INTO election_log (id, log_creation, election_id, election_title, log, severity) VALUES (:id, :log_creation, :election_id, :election_title, :log, :severity)";
     const logParams = {
       id: uuid.v1(),
       log_creation: moment().format("DD-MM-YYYY HH:mm"),
       election_id: id,
+      election_title: body.title,
       log: `Election ${body.title} with ID: ${id} has been updated by user ${username}`,
       severity: "NONE",
     };
@@ -571,11 +572,12 @@ async function remove(req, res, next) {
     });
     await kms.deleteElectionKeys(id);
     const log =
-      "INSERT INTO election_log (id, log_creation, election_id, log, severity) VALUES (:id, :log_creation, :election_id, :log, :severity)";
+      "INSERT INTO election_log (id, log_creation, election_id, election_title, log, severity) VALUES (:id, :log_creation, :election_id, :election_title, :log, :severity)";
     const logParams = {
       id: uuid.v1(),
       log_creation: moment().format("DD-MM-YYYY HH:mm"),
       election_id: id,
+      election_title: election[0].title,
       log: `Election with ID: ${id} has been deleted by user ${username}`,
       severity: "NONE",
     };
@@ -620,11 +622,12 @@ async function regenerateKeys(req, res, next) {
       keyPair.iv
     );
     const log =
-      "INSERT INTO election_log (id, log_creation, election_id, log, severity) VALUES (:id, :log_creation, :election_id, :log, :severity)";
+      "INSERT INTO election_log (id, log_creation, election_id, election_title, log, severity) VALUES (:id, :log_creation, :election_id, :election_title, :log, :severity)";
     const logParams = {
       id: uuid.v1(),
       log_creation: moment().format("DD-MM-YYYY HH:mm"),
       election_id: id,
+      election_title: election[0].title,
       log: ` Keys have been regenerated for election with ID: ${id} by user ${username}`,
       severity: "NONE",
     };

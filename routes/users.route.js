@@ -10,6 +10,12 @@ module.exports = (app) => {
   router.post("/login", userController.login);
   router.put("/:id", auth, userController.update);
   router.delete("/:id", auth, userController.remove);
+  router.delete(
+    "/admin/:id",
+    auth,
+    access(["ADMIN"]),
+    userController.adminUserDelete
+  );
   router.patch(
     "/admin/:id",
     auth,

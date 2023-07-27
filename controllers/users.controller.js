@@ -269,6 +269,62 @@ async function remove(req, res, next) {
   }
 }
 
+async function adminUserDelete(req, res, next) {
+  const id = req.params.id;
+  const token = req.cookies.token;
+  const userId = jwt.decode(token).id;
+  try {
+    if (!uuidValidator(id, 1)) {
+      return next(createError(400, `id ${id} cannot be validated`));
+    }
+    const admin = await sequelize.query(
+      "SELECT id, username, permission FROM e_vote_user WHERE id = :id",
+      {
+        type: QueryTypes.SELECT,
+        replacements: { id: jwt.decode(token).id },
+      }
+    );
+    const user = await sequelize.query(
+      "SELECT * from e_vote_user WHERE id = :id",
+      {
+        type: QueryTypes.SELECT,
+        replacements: { id: id },
+      }
+    );
+    const voter = await sequelize.query(
+      "select count(*) from e_vote_voter where user_id = :id",
+      {
+        type: QueryTypes.SELECT,
+        replacements: { id: id },
+      }
+    );
+    if (voter[0].count > 0) {
+      return next(
+        createError(400, `User ${id} is voter in at least 1 election`)
+      );
+    }
+    if (user.length === 0) {
+      return next(createError(404, `User ${id} not found`));
+    }
+    await sequelize.query("CALL delete_user (:id);", {
+      replacements: { id: id },
+    });
+    const log =
+      "INSERT INTO internal_log (id, log_creation, log, type) VALUES (:id, :log_creation, :log, :type)";
+    const logParams = {
+      id: uuid.v1(),
+      log_creation: moment().format("DD-MM-YYYY HH:mm"),
+      log: `${admin[0].username} deleted user ${user[0].username}`,
+      type: "USER",
+    };
+    await client.execute(log, logParams, { prepare: true });
+    await kms.deleteSignatureKeys(userId);
+    return res.status(200).json(1);
+  } catch (err) {
+    throw err;
+  }
+}
+
 async function show(req, res, next) {
   const id = req.params.id;
   const token = req.cookies.token;
@@ -362,17 +418,11 @@ async function changePermissions(req, res, next) {
     await sequelize.query("CALL change_user_permission(:id, :permission);", {
       replacements: { id: id, permission: permission },
     });
-    await sequelize.query("CALL insert_internal_log(:description, :author);", {
-      replacements: {
-        description: `${admin[0].username} changed permission of ${user[0].username} from ${oldPermission} to ${permission}`,
-        author: admin[0].username,
-      },
-    });
     const log =
-      "INSERT INTO internal_log (id, creation, log, type) VALUES (:id, :creation, :log, :type)";
+      "INSERT INTO internal_log (id, log_creation, log, type) VALUES (:id, :log_creation, :log, :type)";
     const logParams = {
       id: uuid.v1(),
-      creation: moment().format("DD-MM-YYYY HH:mm"),
+      log_creation: moment().format("DD-MM-YYYY HH:mm"),
       log: `${admin[0].username} changed permission of ${user[0].username} from ${oldPermission} to ${permission}`,
       type: "USER",
     };
@@ -410,4 +460,5 @@ module.exports = {
   showUsers,
   changePermissions,
   regenerateKeys,
+  adminUserDelete,
 };
