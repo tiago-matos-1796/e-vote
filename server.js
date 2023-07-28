@@ -38,6 +38,10 @@ require("./routes/election.route")(app);
 require("./routes/statistics.route")(app);
 require("./routes/log.route")(app);
 
+app.use("/candidate-images", express.static("files/images/candidate_images"));
+app.use("/avatars", express.static("files/images/avatars"));
+app.use("/api-images", express.static("files/images/api_images"));
+
 // set port, listen for requests
 async function kms_connection() {
   const c = await kms.kmsConnection();

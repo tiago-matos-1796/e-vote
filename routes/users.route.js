@@ -8,7 +8,7 @@ module.exports = (app) => {
   const userController = require("../controllers/users.controller");
   router.post("/", uploadAvatar.single("image"), userController.register);
   router.post("/login", userController.login);
-  router.put("/:id", auth, userController.update);
+  router.put("/:id", auth, uploadAvatar.single("image"), userController.update);
   router.delete("/:id", auth, userController.remove);
   router.delete(
     "/admin/:id",
@@ -28,7 +28,7 @@ module.exports = (app) => {
     access(["ADMIN", "MANAGER"]),
     userController.showUsers
   );
-  router.get("/:id", auth, userController.show);
+  router.get("/profile", auth, userController.show);
   router.post("/key", auth, userController.regenerateKeys);
   app.use("/users", router);
 };

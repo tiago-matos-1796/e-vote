@@ -167,7 +167,7 @@ async function login(req, res, next) {
       email: user.email,
       displayName: user.displayName,
       username: user.username,
-      image: image,
+      image: user.image,
       permissions: user.permission,
       token: user.token,
     });
@@ -179,6 +179,7 @@ async function login(req, res, next) {
 // DONE
 async function update(req, res, next) {
   const id = req.params.id;
+  const files = req.file;
   const body = req.body;
   const token = req.cookies.token;
   const userId = jwt.decode(token).id;
@@ -188,11 +189,6 @@ async function update(req, res, next) {
   try {
     if (!uuidValidator(id, 1)) {
       return next(createError(400, `id ${id} cannot be validated`));
-    }
-    if (!emailValidator.validate(body.email)) {
-      return next(
-        createError(400, `Email ${body.email} is not in correct format`)
-      );
     }
     const user = await sequelize.query(
       "SELECT * from e_vote_user WHERE id = :id",
@@ -204,34 +200,54 @@ async function update(req, res, next) {
     if (user.length === 0) {
       return next(createError(404, `User ${id} not found`));
     }
-    const userEmail = await sequelize.query(
-      "SELECT * from e_vote_user WHERE email = :email AND NOT id = :id",
-      {
-        type: QueryTypes.SELECT,
-        replacements: { email: body.email, id: id },
+    let imageName = body.image;
+    if (body.avatar === true) {
+      if (body.image.length > 0) {
+        const fileName = `${Date.now()}-${Math.round(Math.random() * 1e9)}_${
+          body.image
+        }`;
+        await sharp(`files/images/avatars/${body.image}`)
+          .resize(180, 180)
+          .toFormat("jpg")
+          .toFile(`files/images/avatars/${fileName}`);
+        fs.unlink(`files/images/avatars/${body.image}`, function (err) {
+          if (err) {
+            throw err;
+          }
+        });
+        fs.unlink(`files/images/avatars/${user[0].image}`, function (err) {
+          if (err) {
+            throw err;
+          }
+        });
+      } else {
+        fs.unlink(`files/images/avatars/${user[0].image}`, function (err) {
+          if (err) {
+            throw err;
+          }
+        });
       }
-    );
-    if (userEmail.length > 0) {
-      return next(createError(400, `Email ${body.email} already in user`));
+    } else {
+      imageName = user[0].image;
     }
     const password =
       body.password.length > 0
         ? await bcrypt.hash(body.password, 13)
         : user[0].password;
     await sequelize.query(
-      "CALL update_user (:id, :email, :display_name, :password);",
+      "CALL update_user (:id, :display_name, :password, :image);",
       {
         replacements: {
           id: id,
-          email: body.email,
-          display_name: body.display_name,
+          display_name: body.displayName,
           password: password,
+          image: imageName,
         },
       }
     );
     return res
       .status(200)
-      .json({ id: id, email: body.email, display_name: body.display_name });
+      .json({ display_name: body.display_name, image: body.image });
   } catch (err) {
     throw err;
   }
@@ -326,24 +342,20 @@ async function adminUserDelete(req, res, next) {
 }
 
 async function show(req, res, next) {
-  const id = req.params.id;
   const token = req.cookies.token;
   const userId = jwt.decode(token).id;
-  if (id !== userId) {
-    return next(createError(403, "Access Denied"));
-  }
   try {
     const profile = await sequelize.query(
       "select username, email, display_name, image from e_vote_user where id = :id;",
       {
         type: QueryTypes.SELECT,
-        replacements: { id: id },
+        replacements: { id: userId },
       }
     );
     if (profile.length === 0) {
-      return next(createError(404, `User ${id} not found`));
+      return next(createError(404, `User ${userId} not found`));
     }
-    return res.status(200).json(profile);
+    return res.status(200).json(profile[0]);
   } catch (err) {
     throw err;
   }
