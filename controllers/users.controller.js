@@ -157,11 +157,6 @@ async function login(req, res, next) {
       return next(createError(400, `Email and/or password is wrong`));
     }
     user = user[0];
-    let image = user.image;
-    if (image) {
-      const file = fs.readFileSync(`files/images/avatars/${image}`);
-      image = Buffer.from(file).toString("base64");
-    }
     return res.status(200).json({
       id: user.id,
       email: user.email,
@@ -179,7 +174,7 @@ async function login(req, res, next) {
 // DONE
 async function update(req, res, next) {
   const id = req.params.id;
-  const files = req.file;
+  const file = req.file;
   const body = req.body;
   const token = req.cookies.token;
   const userId = jwt.decode(token).id;
@@ -200,32 +195,38 @@ async function update(req, res, next) {
     if (user.length === 0) {
       return next(createError(404, `User ${id} not found`));
     }
-    let imageName = body.image;
-    if (body.avatar === true) {
-      if (body.image.length > 0) {
+    let imageName = "";
+    if (body.avatar === "true") {
+      if (file) {
         const fileName = `${Date.now()}-${Math.round(Math.random() * 1e9)}_${
-          body.image
+          file.filename
         }`;
-        await sharp(`files/images/avatars/${body.image}`)
+        await sharp(`files/images/avatars/${file.filename}`)
           .resize(180, 180)
           .toFormat("jpg")
           .toFile(`files/images/avatars/${fileName}`);
-        fs.unlink(`files/images/avatars/${body.image}`, function (err) {
+        fs.unlink(`files/images/avatars/${file.filename}`, function (err) {
           if (err) {
             throw err;
           }
         });
-        fs.unlink(`files/images/avatars/${user[0].image}`, function (err) {
-          if (err) {
-            throw err;
-          }
-        });
+        if (user[0].image) {
+          fs.unlink(`files/images/avatars/${user[0].image}`, function (err) {
+            if (err) {
+              throw err;
+            }
+          });
+        }
+        imageName = fileName;
       } else {
-        fs.unlink(`files/images/avatars/${user[0].image}`, function (err) {
-          if (err) {
-            throw err;
-          }
-        });
+        if (user[0].image) {
+          fs.unlink(`files/images/avatars/${user[0].image}`, function (err) {
+            if (err) {
+              throw err;
+            }
+          });
+        }
+        imageName = null;
       }
     } else {
       imageName = user[0].image;
@@ -247,7 +248,7 @@ async function update(req, res, next) {
     );
     return res
       .status(200)
-      .json({ display_name: body.display_name, image: body.image });
+      .json({ display_name: body.displayName, image: imageName });
   } catch (err) {
     throw err;
   }
@@ -274,6 +275,13 @@ async function remove(req, res, next) {
     );
     if (user.length === 0) {
       return next(createError(404, `User ${id} not found`));
+    }
+    if (user[0].image) {
+      fs.unlink(`files/images/avatars/${user[0].image}`, function (err) {
+        if (err) {
+          throw err;
+        }
+      });
     }
     await sequelize.query("CALL delete_user (:id);", {
       replacements: { id: id },
