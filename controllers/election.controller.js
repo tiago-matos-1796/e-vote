@@ -8,7 +8,7 @@ const encryption = require("../services/encryption.service");
 const kms = require("../utils/kms.utils");
 const { QueryTypes } = require("sequelize");
 const uuidValidator = require("uuid-validate");
-const { client } = require("../configs/cassandra");
+const { client } = require("../configs/cassandra.config");
 const moment = require("moment");
 const fs = require("fs");
 const sharp = require("sharp");
@@ -261,11 +261,13 @@ async function create(req, res, next) {
         }
       );
     }
-    for (const voter of body.voters) {
-      await sequelize.query("CALL insert_voter (:user_id, :election_id);", {
-        replacements: { user_id: voter, election_id: electionId },
-        transaction,
-      });
+    if (body.voters) {
+      for (const voter of body.voters) {
+        await sequelize.query("CALL insert_voter (:user_id, :election_id);", {
+          replacements: { user_id: voter, election_id: electionId },
+          transaction,
+        });
+      }
     }
     await transaction.commit();
     const log =

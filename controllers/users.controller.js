@@ -11,7 +11,7 @@ const uuidValidator = require("uuid-validate");
 const bcrypt = require("bcrypt");
 const permissions = ["ADMIN", "MANAGER", "AUDITOR", "REGULAR"];
 const encryption = require("../services/encryption.service");
-const { client } = require("../configs/cassandra");
+const { client } = require("../configs/cassandra.config");
 const fs = require("fs");
 const sharp = require("sharp");
 const moment = require("moment/moment");
@@ -22,11 +22,13 @@ async function register(req, res, next) {
   let image = req.file ? req.file.filename : null;
   try {
     if (!emailValidator.validate(body.email)) {
-      fs.unlink(`files/images/avatars/${image}`, function (err) {
-        if (err) {
-          throw err;
-        }
-      });
+      if (image) {
+        fs.unlink(`files/images/avatars/${image}`, function (err) {
+          if (err) {
+            throw err;
+          }
+        });
+      }
       return next(
         createError(400, `Email ${body.email} is not in correct format`)
       );
@@ -38,30 +40,57 @@ async function register(req, res, next) {
         replacements: { email: body.email },
       }
     );
-    if (result.length > 0) {
-      fs.unlink(`files/images/avatars/${image}`, function (err) {
-        if (err) {
-          throw err;
+    const blacklist = await sequelize.query(
+      "SELECT email from e_vote_blacklist",
+      {
+        type: QueryTypes.SELECT,
+      }
+    );
+    if (blacklist.length > 0) {
+      const bEmail = blacklist.find((x) => x.email === body.email);
+      if (bEmail) {
+        if (image) {
+          fs.unlink(`files/images/avatars/${image}`, function (err) {
+            if (err) {
+              throw err;
+            }
+          });
         }
-      });
+        return next(
+          createError(400, `Email ${body.email} is not permitted to register`)
+        );
+      }
+    }
+    if (result.length > 0) {
+      if (image) {
+        fs.unlink(`files/images/avatars/${image}`, function (err) {
+          if (err) {
+            throw err;
+          }
+        });
+      }
       return next(createError(409, `Email ${body.email} already in use`));
     }
     if (body.password.length < 8) {
-      fs.unlink(`files/images/avatars/${image}`, function (err) {
-        if (err) {
-          throw err;
-        }
-      });
+      if (image) {
+        fs.unlink(`files/images/avatars/${image}`, function (err) {
+          if (err) {
+            throw err;
+          }
+        });
+      }
       return next(
         createError(400, `Password must have at least a length of 8`)
       );
     }
     if (body.sign_key.length !== 16) {
-      fs.unlink(`files/images/avatars/${image}`, function (err) {
-        if (err) {
-          throw err;
-        }
-      });
+      if (image) {
+        fs.unlink(`files/images/avatars/${image}`, function (err) {
+          if (err) {
+            throw err;
+          }
+        });
+      }
       return next(createError(400, `Signature key must have a length of 16`));
     }
     const keys = encryption.generateSignatureKeys(body.sign_key);
@@ -77,11 +106,13 @@ async function register(req, res, next) {
     );
     if (key.status !== 201) {
       if (key.status === 400) {
-        fs.unlink(`files/images/avatars/${image}`, function (err) {
-          if (err) {
-            throw err;
-          }
-        });
+        if (image) {
+          fs.unlink(`files/images/avatars/${image}`, function (err) {
+            if (err) {
+              throw err;
+            }
+          });
+        }
         return next(createError(400, `Duplicate key`));
       } else {
         return res.status(500).send("Error inserting user keys");
@@ -382,7 +413,7 @@ async function showUsers(req, res, next) {
     );
     if (user[0].permission === "ADMIN") {
       const users = await sequelize.query(
-        "select id, username, email, display_name, permission from e_vote_user;",
+        "select id, username, email, display_name, permission, blocked from e_vote_user;",
         {
           type: QueryTypes.SELECT,
         }
@@ -471,6 +502,99 @@ async function regenerateKeys(req, res, next) {
   }
 }
 
+async function blockUser(req, res, next) {
+  const id = req.params.id;
+  const token = req.cookies.token;
+  try {
+    const admin = await sequelize.query(
+      "SELECT id, username, permission FROM e_vote_user WHERE id = :id",
+      {
+        type: QueryTypes.SELECT,
+        replacements: { id: jwt.decode(token).id },
+      }
+    );
+    const user = await sequelize.query(
+      "SELECT * from e_vote_user WHERE id = :id",
+      {
+        type: QueryTypes.SELECT,
+        replacements: { id: id },
+      }
+    );
+    const election = await sequelize.query(
+      "select eve.id, eve.title from e_vote_election eve inner join e_vote_voter evv on eve.id = evv.election_id where evv.user_id = :id and eve.results IS NULL;",
+      {
+        type: QueryTypes.SELECT,
+        replacements: { id: id },
+      }
+    );
+    if (user[0].length === 0) {
+      return next(createError(404, `User ${id} does not exist`));
+    }
+    if (election[0].length > 0) {
+      return next(
+        createError(
+          404,
+          `Cannot block User ${id}; User is voter in ongoing elections`
+        )
+      );
+    }
+    await sequelize.query("CALL block_user (:id);", {
+      replacements: { id: id },
+    });
+    const log =
+      "INSERT INTO internal_log (id, log_creation, log, type) VALUES (:id, :log_creation, :log, :type)";
+    const logParams = {
+      id: uuid.v1(),
+      log_creation: moment().format("DD-MM-YYYY HH:mm"),
+      log: `${admin[0].username} blocked ${user[0].username}`,
+      type: "USER",
+    };
+    await client.execute(log, logParams, { prepare: true });
+    return res.status(200).json(1);
+  } catch (err) {
+    throw err;
+  }
+}
+
+async function unblockUser(req, res, next) {
+  const id = req.params.id;
+  const token = req.cookies.token;
+  try {
+    const user = await sequelize.query(
+      "SELECT * from e_vote_user WHERE id = :id",
+      {
+        type: QueryTypes.SELECT,
+        replacements: { id: id },
+      }
+    );
+    const admin = await sequelize.query(
+      "SELECT id, username, permission FROM e_vote_user WHERE id = :id",
+      {
+        type: QueryTypes.SELECT,
+        replacements: { id: jwt.decode(token).id },
+      }
+    );
+    if (user[0].length === 0) {
+      return next(createError(404, `User ${id} does not exist`));
+    }
+    await sequelize.query("CALL unblock_user (:id);", {
+      replacements: { id: id },
+    });
+    const log =
+      "INSERT INTO internal_log (id, log_creation, log, type) VALUES (:id, :log_creation, :log, :type)";
+    const logParams = {
+      id: uuid.v1(),
+      log_creation: moment().format("DD-MM-YYYY HH:mm"),
+      log: `${admin[0].username} unblocked ${user[0].username}`,
+      type: "USER",
+    };
+    await client.execute(log, logParams, { prepare: true });
+    return res.status(200).json(1);
+  } catch (err) {
+    throw err;
+  }
+}
+
 module.exports = {
   register,
   login,
@@ -481,4 +605,6 @@ module.exports = {
   changePermissions,
   regenerateKeys,
   adminUserDelete,
+  blockUser,
+  unblockUser,
 };

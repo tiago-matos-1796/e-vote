@@ -2,7 +2,8 @@ const express = require("express");
 const router = express.Router();
 const auth = require("../middleware/auth.middleware");
 const { access } = require("../middleware/permission.middleware");
-const { uploadAvatar } = require("../configs/multer");
+const { uploadAvatar } = require("../configs/multer.config");
+const userController = require("../controllers/users.controller");
 
 module.exports = (app) => {
   const userController = require("../controllers/users.controller");
@@ -15,6 +16,18 @@ module.exports = (app) => {
     auth,
     access(["ADMIN"]),
     userController.adminUserDelete
+  );
+  router.patch(
+    "/admin/block/:id",
+    auth,
+    access(["ADMIN"]),
+    userController.blockUser
+  );
+  router.patch(
+    "/admin/unblock/:id",
+    auth,
+    access(["ADMIN"]),
+    userController.unblockUser
   );
   router.patch(
     "/admin/:id",
