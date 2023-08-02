@@ -15,6 +15,7 @@ const { client } = require("../configs/cassandra.config");
 const fs = require("fs");
 const sharp = require("sharp");
 const moment = require("moment/moment");
+const { transporter } = require("../configs/smtp.config");
 
 // DONE
 async function register(req, res, next) {
@@ -133,8 +134,12 @@ async function register(req, res, next) {
       });
       image = fileName;
     }
+    const activation_token = crypto
+      .createHash("sha256")
+      .update(Date.now().toString())
+      .digest("base64");
     await sequelize.query(
-      "CALL insert_user (:id, :username, :email, :display_name, :image, :password, :permission, :token);",
+      "CALL insert_user (:id, :username, :email, :display_name, :image, :password, :permission, :token, :verification);",
       {
         replacements: {
           id: id,
@@ -145,24 +150,54 @@ async function register(req, res, next) {
           password: password,
           permission: "REGULAR",
           token: token,
+          verification: activation_token,
         },
       }
     );
-    return res.status(200).json({
-      id: id,
-      username: username,
-      email: body.email,
-      display_name: body.display_name,
-      image: image,
-      permission: "REGULAR",
-      token: token,
+    const link = `http://localhost:5173/verification/${activation_token}`;
+    const mailOptions = {
+      from: "UAlg Secure Vote",
+      to: body.email,
+      subject: "Register",
+      text: "Thank you for registering in UAlg secure vote",
+      html: `<b>Hey ${body.display_name}! </b><br> Thank you for registering in UAlg secure vote<br>Please use the following link to verify your account:<br><a href="${link}">${link}</a>`,
+    };
+    await transporter.sendMail(mailOptions, (error, info) => {
+      if (error) {
+        return console.log(error);
+      }
+      console.log("Message sent: %s", info.messageId);
     });
+    return res.status(200).json(1);
   } catch (err) {
     fs.unlink(`files/images/avatars/${image}`, function (err) {
       if (err) {
         throw err;
       }
     });
+    throw err;
+  }
+}
+
+async function verify(req, res, next) {
+  const token = req.params.token;
+  try {
+    const account = await sequelize.query(
+      "SELECT * FROM e_vote_user WHERE activation_token = :token",
+      {
+        type: QueryTypes.SELECT,
+        replacements: { token: token },
+      }
+    );
+    if (account.length === 0) {
+      return next(createError(400, "Token does not exist"));
+    }
+    await sequelize.query("CALL verify_account (:token);", {
+      type: QueryTypes.SELECT,
+      replacements: { token: token },
+    });
+    return res.status(200).json(1);
+  } catch (err) {
     throw err;
   }
 }
@@ -177,15 +212,28 @@ async function login(req, res, next) {
       );
     }
     let user = await sequelize.query(
-      "SELECT * from e_vote_user WHERE email = :email",
+      "SELECT * from e_vote_user WHERE email = :email AND blocked = false",
       {
         type: QueryTypes.SELECT,
         replacements: { email: body.email },
       }
     );
-    const compare = await bcrypt.compare(body.password, user[0].password);
-    if (user.length === 0 || !compare) {
-      return next(createError(400, `Email and/or password is wrong`));
+
+    if (user.length === 0) {
+      return next(
+        createError(
+          403,
+          "Account temporarily unavailable, please try again later"
+        )
+      );
+    } else {
+      const compare = await bcrypt.compare(body.password, user[0].password);
+      if (!compare) {
+        return next(createError(400, `Email and/or password is wrong`));
+      }
+    }
+    if (user[0].activation_token) {
+      return next(createError(406, `Account not yet active`));
     }
     user = user[0];
     return res.status(200).json({
@@ -422,7 +470,7 @@ async function showUsers(req, res, next) {
     }
     if (user[0].permission === "MANAGER") {
       const users = await sequelize.query(
-        "select id, email, display_name from e_vote_user;",
+        "select id, email, display_name from e_vote_user where blocked = false;",
         {
           type: QueryTypes.SELECT,
         }
@@ -607,4 +655,5 @@ module.exports = {
   adminUserDelete,
   blockUser,
   unblockUser,
+  verify,
 };
