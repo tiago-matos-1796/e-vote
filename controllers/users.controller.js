@@ -724,7 +724,26 @@ async function unblockUser(req, res, next) {
   }
 }
 
-async function blacklistEmails(req, res, next) {}
+async function blacklistEmails(req, res, next) {
+  const body = req.body;
+  const transaction = await sequelize.transaction();
+  try {
+    await sequelize.query("CALL delete_blacklist();", {
+      transaction,
+    });
+    for (const email of body.blacklist) {
+      await sequelize.query("CALL insert_blacklisted_user (:email);", {
+        replacements: { email: email.email },
+        transaction,
+      });
+    }
+    await transaction.commit();
+    return res.status(200).json(1);
+  } catch (err) {
+    await transaction.rollback();
+    throw err;
+  }
+}
 
 module.exports = {
   register,
