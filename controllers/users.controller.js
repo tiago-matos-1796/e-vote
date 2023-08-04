@@ -16,6 +16,7 @@ const fs = require("fs");
 const sharp = require("sharp");
 const moment = require("moment/moment");
 const { transporter } = require("../configs/smtp.config");
+const { func } = require("joi");
 
 // DONE
 async function register(req, res, next) {
@@ -250,6 +251,80 @@ async function login(req, res, next) {
   }
 }
 
+async function forgotPassword(req, res, next) {
+  const body = req.body;
+  try {
+    const user = await sequelize.query(
+      "SELECT * from e_vote_user WHERE email = :email",
+      {
+        type: QueryTypes.SELECT,
+        replacements: { email: body.email },
+      }
+    );
+    if (user.length === 0) {
+      return next(createError(404, `Email ${body.email} not found`));
+    }
+    const token = crypto
+      .createHash("sha256")
+      .update(Date.now().toString())
+      .digest("base64");
+    await sequelize.query("CALL insert_reset_token (:email, :token);", {
+      replacements: {
+        email: body.email,
+        token: token,
+      },
+    });
+    const link = `http://localhost:5173/recovery/${token}`;
+    const mailOptions = {
+      from: "UAlg Secure Vote",
+      to: body.email,
+      subject: "Password recovery",
+      html: `<b>Hey ${user[0].display_name}! </b><br>To recover your password please use the following link:<br><a href="${link}">${link}</a><br>Thank you!`,
+    };
+    await transporter.sendMail(mailOptions, (error, info) => {
+      if (error) {
+        return console.log(error);
+      }
+      console.log("Message sent: %s", info.messageId);
+    });
+    return res.status(200).json(1);
+  } catch (err) {
+    throw err;
+  }
+}
+
+async function passwordRecovery(req, res, next) {
+  const token = req.params.token;
+  const body = req.body;
+  try {
+    if (token) {
+      const user = await sequelize.query(
+        "SELECT * from e_vote_user WHERE reset_token = :token;",
+        {
+          type: QueryTypes.SELECT,
+          replacements: { token: token },
+        }
+      );
+      if (user.length === 0) {
+        return next(createError(404, "Token could not be verified"));
+      }
+      const password = await bcrypt.hash(body.password, 13);
+      await sequelize.query("CALL password_recovery ( :password, :token);", {
+        type: QueryTypes.SELECT,
+        replacements: {
+          password: password,
+          token: token,
+        },
+      });
+      return res.status(200).json(1);
+    } else {
+      return next(createError(400, "Token is required"));
+    }
+  } catch (err) {
+    throw err;
+  }
+}
+
 // DONE
 async function update(req, res, next) {
   const id = req.params.id;
@@ -333,7 +408,7 @@ async function update(req, res, next) {
   }
 }
 
-// TODO check if user belongs to an active election, do not delete if its the case
+// DONE check if user belongs to an active election, do not delete if its the case
 async function remove(req, res, next) {
   const id = req.params.id;
   const token = req.cookies.token;
@@ -466,7 +541,13 @@ async function showUsers(req, res, next) {
           type: QueryTypes.SELECT,
         }
       );
-      return res.status(200).json(users);
+      const blacklist = await sequelize.query(
+        "select email from e_vote_blacklist",
+        {
+          type: QueryTypes.SELECT,
+        }
+      );
+      return res.status(200).json({ users: users, blacklist: blacklist });
     }
     if (user[0].permission === "MANAGER") {
       const users = await sequelize.query(
@@ -643,6 +724,8 @@ async function unblockUser(req, res, next) {
   }
 }
 
+async function blacklistEmails(req, res, next) {}
+
 module.exports = {
   register,
   login,
@@ -656,4 +739,7 @@ module.exports = {
   blockUser,
   unblockUser,
   verify,
+  forgotPassword,
+  passwordRecovery,
+  blacklistEmails,
 };

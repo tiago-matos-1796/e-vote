@@ -8,6 +8,13 @@ module.exports = (app) => {
   const userController = require("../controllers/users.controller");
   router.post("/", uploadAvatar.single("image"), userController.register);
   router.post("/login", userController.login);
+  router.post("/forgot-password", userController.forgotPassword);
+  router.post(
+    "/admin/blacklist",
+    auth,
+    access(["ADMIN"]),
+    userController.blacklistEmails
+  );
   router.put("/:id", auth, uploadAvatar.single("image"), userController.update);
   router.delete("/:id", auth, userController.remove);
   router.delete(
@@ -17,6 +24,7 @@ module.exports = (app) => {
     userController.adminUserDelete
   );
   router.patch("/verify/:token", userController.verify);
+  router.patch("/password-recovery/:token", userController.passwordRecovery);
   router.patch(
     "/admin/block/:id",
     auth,
