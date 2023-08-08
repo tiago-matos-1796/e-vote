@@ -2,7 +2,6 @@ const express = require("express");
 const router = express.Router();
 const auth = require("../middleware/auth.middleware");
 const { access } = require("../middleware/permission.middleware");
-const statisticsController = require("../controllers/statistics.controller");
 
 module.exports = (app) => {
   const statisticsController = require("../controllers/statistics.controller");

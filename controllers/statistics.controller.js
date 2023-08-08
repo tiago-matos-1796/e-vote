@@ -10,7 +10,11 @@ const createError = require("http-errors");
 const uuidValidator = require("uuid-validate");
 const moment = require("moment");
 const _ = require("lodash");
-const net = require("net");
+const { createReports } = require("../utils/svm.utils");
+const PDFDocument = require("pdfkit-table");
+const fs = require("fs");
+const ChartJsImage = require("chartjs-to-image");
+const ExcelJS = require("exceljs");
 
 async function vote(req, res, next) {
   const id = req.params.id;
@@ -164,21 +168,60 @@ async function countVotes(req, res, next) {
         replacements: { id: id },
       }
     );
+    const candidates = await sequelize.query(
+      "SELECT * from e_vote_candidate WHERE election_id = :id",
+      {
+        type: QueryTypes.SELECT,
+        replacements: { id: id },
+      }
+    );
+    const voters = await sequelize.query(
+      "SELECT * from e_vote_voter WHERE election_id = :id AND voted IS NOT NULL",
+      {
+        type: QueryTypes.SELECT,
+        replacements: { id: id },
+      }
+    );
     const query =
       "SELECT vote FROM votes WHERE election_id = :id ALLOW FILTERING";
     const params = { id: id };
     const votes = await client.execute(query, params, { prepare: true });
+    if (votes.rows.length !== voters.length) {
+      const log =
+        "INSERT INTO election_log (id, log_creation, election_id, log, severity) VALUES (:id, :log_creation, :election_id, :log, :severity)";
+      const logParams = {
+        id: uuid.v1(),
+        log_creation: moment().format("DD-MM-YYYY HH:mm"),
+        election_id: id,
+        log: `Recorded votes do not match the amount of votes submitted by voters`,
+        severity: "HIGH",
+      };
+      await client.execute(log, logParams, { prepare: true });
+      return next(createError(403, `Possible fraud detected`));
+    }
     const decryptionKey = await kms.getElectionPrivateKey(id);
     const decryptedVotes = [];
     for (const vote of votes.rows) {
-      decryptedVotes.push(
-        encryption.decrypt(
-          vote.vote,
-          decryptionKey.data.key,
-          body.key,
-          decryptionKey.data.iv
-        )
+      const decryptedVote = encryption.decrypt(
+        vote.vote,
+        decryptionKey.data.key,
+        body.key,
+        decryptionKey.data.iv
       );
+      if (candidates.find((x) => x.id === decryptedVote)) {
+        decryptedVotes.push(decryptedVote);
+      } else {
+        const log =
+          "INSERT INTO election_log (id, log_creation, election_id, log, severity) VALUES (:id, :log_creation, :election_id, :log, :severity)";
+        const logParams = {
+          id: uuid.v1(),
+          log_creation: moment().format("DD-MM-YYYY HH:mm"),
+          election_id: id,
+          log: `Vote no matching any candidate has been found`,
+          severity: "MEDIUM",
+        };
+        await client.execute(log, logParams, { prepare: true });
+      }
     }
     const voteCount = _.countBy(decryptedVotes);
     const results = encryption.internalEncrypt(JSON.stringify(voteCount));
@@ -196,6 +239,7 @@ async function countVotes(req, res, next) {
     await sequelize.query("CALL insert_election_results(:id, :results);", {
       replacements: { id: id, results: results },
     });
+    await createReports(id, voteCount);
     return res.status(200).send("Counted with success");
   } catch (err) {
     throw err;
@@ -206,7 +250,7 @@ async function showResults(req, res, next) {
   const id = req.params.id;
   try {
     const results = await sequelize.query(
-      "SELECT results from e_vote_election WHERE id = :id;",
+      "SELECT results, pdf, xlsx from e_vote_election WHERE id = :id;",
       {
         type: QueryTypes.SELECT,
         replacements: { id: id },
@@ -250,6 +294,8 @@ async function showResults(req, res, next) {
         ["Not Voted", notVoted],
       ],
       voteData: candidateVotes,
+      pdf: results[0].pdf,
+      xlsx: results[0].xlsx,
     });
   } catch (err) {
     throw err;
@@ -309,4 +355,10 @@ async function showResultsUser(req, res, next) {
   }
 }
 
-module.exports = { vote, countVotes, showStatus, showResults, showResultsUser };
+module.exports = {
+  vote,
+  countVotes,
+  showStatus,
+  showResults,
+  showResultsUser,
+};
