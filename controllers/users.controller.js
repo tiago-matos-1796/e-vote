@@ -16,7 +16,7 @@ const fs = require("fs");
 const sharp = require("sharp");
 const moment = require("moment/moment");
 const { transporter } = require("../configs/smtp.config");
-const { func } = require("joi");
+const logger = require("../utils/log.utils");
 
 // DONE
 async function register(req, res, next) {
@@ -155,7 +155,7 @@ async function register(req, res, next) {
         },
       }
     );
-    const link = `http://localhost:5173/verification/${activation_token}`;
+    const link = `${process.env.FRONTEND_URI}/verification/${activation_token}`;
     const mailOptions = {
       from: "UAlg Secure Vote",
       to: body.email,
@@ -745,6 +745,166 @@ async function blacklistEmails(req, res, next) {
   }
 }
 
+async function bulkRegister(req, res, next) {
+  const body = req.body;
+  const transaction = await sequelize.transaction();
+  try {
+    const generatedUser = [];
+    for (const user of body) {
+      const id = uuid.v1();
+      let username = "";
+      let permission = "";
+      let token = "";
+      const activation_token = crypto
+        .createHash("sha256")
+        .update(Date.now().toString())
+        .digest("base64");
+      if (typeof user === "string") {
+        username = user.split("@")[0];
+        permission = "REGULAR";
+        token = jwt.sign(
+          { id: id, username: username },
+          process.env.JWT_SECRET
+        );
+        await sequelize.query(
+          "CALL partial_insert_user (:id, :username, :email, :permission, :token, :activation_token);",
+          {
+            replacements: {
+              id: id,
+              username: username,
+              email: user,
+              permission: permission,
+              token: token,
+              activation_token: activation_token,
+            },
+            transaction,
+          }
+        );
+        generatedUser.push({ email: user, activation_token: activation_token });
+      }
+      if (typeof user === "object") {
+        username = user.email.split("@")[0];
+        permission = user.permission;
+        token = jwt.sign(
+          { id: id, username: username },
+          process.env.JWT_SECRET
+        );
+        await sequelize.query(
+          "CALL partial_insert_user (:id, :username, :email, :permission, :token, :activation_token);",
+          {
+            replacements: {
+              id: id,
+              username: username,
+              email: user.email,
+              permission: permission,
+              token: token,
+              activation_token: activation_token,
+            },
+            transaction,
+          }
+        );
+        generatedUser.push({
+          email: user.email,
+          activation_token: activation_token,
+        });
+      }
+    }
+    await transaction.commit();
+    for (const genUser of generatedUser) {
+      const link = `${process.env.FRONTEND_URI}/register/${genUser.activation_token}`;
+      const mailOptions = {
+        from: "UAlg Secure Vote",
+        to: body.email,
+        subject: "Register",
+        text: "Thank you for registering in UAlg secure vote",
+        html: `<b>Hey ${body.display_name}! </b><br> Thank you for registering in UAlg secure vote<br>Please use the following link to complete your registration:<br><a href="${link}">${link}</a>`,
+      };
+      await transporter.sendMail(mailOptions, (error, info) => {
+        if (error) {
+          return console.log(error);
+        }
+        console.log("Message sent: %s", info.messageId);
+      });
+    }
+    return res.status(200).send("Inserted with success");
+  } catch (err) {
+    await transaction.rollback();
+    throw err;
+  }
+}
+
+async function partialRegister(req, res, next) {
+  const token = req.params.token;
+  const body = req.body;
+  let image = req.file ? req.file.filename : null;
+  try {
+    const user = await sequelize.query(
+      "SELECT * FROM e_vote_user WHERE partial_activation_token = :token;",
+      {
+        type: QueryTypes.SELECT,
+        replacements: {
+          token: token,
+        },
+      }
+    );
+    if (user.length === 0) {
+      return next(createError(404, "Token not found"));
+    }
+    const keys = encryption.generateSignatureKeys(body.sign_key);
+    const password = await bcrypt.hash(body.password, 13);
+    const key = await kms.insertSignature(
+      user[0].id,
+      keys.publicKey,
+      keys.privateKey,
+      keys.iv
+    );
+    if (key.status !== 201) {
+      if (key.status === 400) {
+        if (image) {
+          fs.unlink(`files/images/avatars/${image}`, function (err) {
+            if (err) {
+              throw err;
+            }
+          });
+        }
+        return next(createError(400, `Duplicate key`));
+      } else {
+        return res.status(500).send("Error inserting user keys");
+      }
+    }
+    if (image) {
+      const fileName = `${Date.now()}-${Math.round(
+        Math.random() * 1e9
+      )}_${image}`;
+      await sharp(`files/images/avatars/${image}`)
+        .resize(180, 180)
+        .toFormat("jpg")
+        .toFile(`files/images/avatars/${fileName}`);
+      fs.unlink(`files/images/avatars/${image}`, function (err) {
+        if (err) {
+          throw err;
+        }
+      });
+      image = fileName;
+    }
+    await sequelize.query(
+      "CALL register_user (:displayName, :password, :image, :token);",
+      {
+        replacements: {
+          displayName: body.display_name,
+          password: password,
+          image: image,
+          token: token,
+        },
+      }
+    );
+    return res.status(200).json(1);
+  } catch (err) {
+    await logger.insertSystemLog("register", err.message, "PATCH");
+    return res.status(500).send("An error has occurred");
+  }
+}
+
 module.exports = {
   register,
   login,
@@ -761,4 +921,6 @@ module.exports = {
   forgotPassword,
   passwordRecovery,
   blacklistEmails,
+  bulkRegister,
+  partialRegister,
 };

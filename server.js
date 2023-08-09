@@ -70,6 +70,8 @@ app.use(
   })
 );
 
+app.disable("x-powered-by");
+
 // set port, listen for requests
 async function kms_connection() {
   const c = await kms.kmsConnection();

@@ -7,6 +7,7 @@ const { uploadAvatar } = require("../configs/multer.config");
 module.exports = (app) => {
   const userController = require("../controllers/users.controller");
   router.post("/", uploadAvatar.single("image"), userController.register);
+  router.post("/bulk-register", userController.bulkRegister);
   router.post("/login", userController.login);
   router.post("/forgot-password", userController.forgotPassword);
   router.post(
@@ -22,6 +23,11 @@ module.exports = (app) => {
     auth,
     access(["ADMIN"]),
     userController.adminUserDelete
+  );
+  router.patch(
+    "/register/:token",
+    uploadAvatar.single("image"),
+    userController.partialRegister
   );
   router.patch("/verify/:token", userController.verify);
   router.patch("/password-recovery/:token", userController.passwordRecovery);
