@@ -96,7 +96,7 @@ async function register(req, res, next) {
       return next(createError(400, `Signature key must have a length of 16`));
     }
     const keys = encryption.generateSignatureKeys(body.sign_key);
-    const username = body.email.split("@")[0];
+    const username = body.email.split("@")[0] + Date.now().toString();
     const password = await bcrypt.hash(body.password, 13);
     const id = uuid.v1();
     const token = jwt.sign({ id: id, username: username }, config.JWT_SECRET);
@@ -155,7 +155,7 @@ async function register(req, res, next) {
         },
       }
     );
-    const link = `${process.env.FRONTEND_URI}/verification/${activation_token}`;
+    const link = `${process.env.FRONTEND_URI}/verification?token=${activation_token}`;
     const mailOptions = {
       from: "UAlg Secure Vote",
       to: body.email,
@@ -176,7 +176,8 @@ async function register(req, res, next) {
         throw err;
       }
     });
-    throw err;
+    await logger.insertSystemLog("/users/", err.message, err.stack, "POST");
+    return res.status(500).send("An error has occurred");
   }
 }
 
@@ -199,7 +200,13 @@ async function verify(req, res, next) {
     });
     return res.status(200).json(1);
   } catch (err) {
-    throw err;
+    await logger.insertSystemLog(
+      "/users/verify/:token",
+      err.message,
+      err.stack,
+      "PATCH"
+    );
+    return res.status(500).send("An error has occurred");
   }
 }
 
@@ -247,7 +254,13 @@ async function login(req, res, next) {
       token: user.token,
     });
   } catch (err) {
-    throw err;
+    await logger.insertSystemLog(
+      "/users/login",
+      err.message,
+      err.stack,
+      "POST"
+    );
+    return res.status(500).send("An error has occurred");
   }
 }
 
@@ -274,7 +287,7 @@ async function forgotPassword(req, res, next) {
         token: token,
       },
     });
-    const link = `http://localhost:5173/recovery/${token}`;
+    const link = `http://localhost:5173/recovery?token=${token}`;
     const mailOptions = {
       from: "UAlg Secure Vote",
       to: body.email,
@@ -289,7 +302,13 @@ async function forgotPassword(req, res, next) {
     });
     return res.status(200).json(1);
   } catch (err) {
-    throw err;
+    await logger.insertSystemLog(
+      "/users/forgot-password",
+      err.message,
+      err.stack,
+      "POST"
+    );
+    return res.status(500).send("An error has occurred");
   }
 }
 
@@ -321,7 +340,13 @@ async function passwordRecovery(req, res, next) {
       return next(createError(400, "Token is required"));
     }
   } catch (err) {
-    throw err;
+    await logger.insertSystemLog(
+      "/users/password-recovery/:token",
+      err.message,
+      err.stack,
+      "PATCH"
+    );
+    return res.status(500).send("An error has occurred");
   }
 }
 
@@ -404,7 +429,8 @@ async function update(req, res, next) {
       .status(200)
       .json({ display_name: body.displayName, image: imageName });
   } catch (err) {
-    throw err;
+    await logger.insertSystemLog("/users/:id", err.message, err.stack, "PUT");
+    return res.status(500).send("An error has occurred");
   }
 }
 
@@ -443,7 +469,13 @@ async function remove(req, res, next) {
     await kms.deleteSignatureKeys(userId);
     return res.status(200).json(1);
   } catch (err) {
-    throw err;
+    await logger.insertSystemLog(
+      "/users/:id",
+      err.message,
+      err.stack,
+      "DELETE"
+    );
+    return res.status(500).send("An error has occurred");
   }
 }
 
@@ -499,7 +531,13 @@ async function adminUserDelete(req, res, next) {
     await kms.deleteSignatureKeys(userId);
     return res.status(200).json(1);
   } catch (err) {
-    throw err;
+    await logger.insertSystemLog(
+      "/users/admin/:id",
+      err.message,
+      err.stack,
+      "DELETE"
+    );
+    return res.status(500).send("An error has occurred");
   }
 }
 
@@ -519,7 +557,13 @@ async function show(req, res, next) {
     }
     return res.status(200).json(profile[0]);
   } catch (err) {
-    throw err;
+    await logger.insertSystemLog(
+      "/users/profile",
+      err.message,
+      err.stack,
+      "GET"
+    );
+    return res.status(500).send("An error has occurred");
   }
 }
 
@@ -559,7 +603,13 @@ async function showUsers(req, res, next) {
       return res.status(200).json(users);
     }
   } catch (err) {
-    throw err;
+    await logger.insertSystemLog(
+      "/users/user-list",
+      err.message,
+      err.stack,
+      "GET"
+    );
+    return res.status(500).send("An error has occurred");
   }
 }
 
@@ -609,7 +659,13 @@ async function changePermissions(req, res, next) {
     await client.execute(log, logParams, { prepare: true });
     return res.status(200).json({ id: id, permission: permission });
   } catch (err) {
-    throw err;
+    await logger.insertSystemLog(
+      "/users/admin/:id",
+      err.message,
+      err.stack,
+      "PATCH"
+    );
+    return res.status(500).send("An error has occurred");
   }
 }
 
@@ -627,7 +683,8 @@ async function regenerateKeys(req, res, next) {
     );
     return res.status(200).json(1);
   } catch (err) {
-    throw err;
+    await logger.insertSystemLog("/users/key", err.message, err.stack, "POST");
+    return res.status(500).send("An error has occurred");
   }
 }
 
@@ -681,7 +738,13 @@ async function blockUser(req, res, next) {
     await client.execute(log, logParams, { prepare: true });
     return res.status(200).json(1);
   } catch (err) {
-    throw err;
+    await logger.insertSystemLog(
+      "/users/admin/block/:id",
+      err.message,
+      err.stack,
+      "PATCH"
+    );
+    return res.status(500).send("An error has occurred");
   }
 }
 
@@ -720,7 +783,13 @@ async function unblockUser(req, res, next) {
     await client.execute(log, logParams, { prepare: true });
     return res.status(200).json(1);
   } catch (err) {
-    throw err;
+    await logger.insertSystemLog(
+      "/users/admin/unblock/:id",
+      err.message,
+      err.stack,
+      "PATCH"
+    );
+    return res.status(500).send("An error has occurred");
   }
 }
 
@@ -741,7 +810,13 @@ async function blacklistEmails(req, res, next) {
     return res.status(200).json(1);
   } catch (err) {
     await transaction.rollback();
-    throw err;
+    await logger.insertSystemLog(
+      "/users/admin/blacklist",
+      err.message,
+      err.stack,
+      "POST"
+    );
+    return res.status(500).send("An error has occurred");
   }
 }
 
@@ -760,7 +835,7 @@ async function bulkRegister(req, res, next) {
         .update(Date.now().toString())
         .digest("base64");
       if (typeof user === "string") {
-        username = user.split("@")[0];
+        username = user.split("@")[0] + Date.now().toString();
         permission = "REGULAR";
         token = jwt.sign(
           { id: id, username: username },
@@ -783,7 +858,7 @@ async function bulkRegister(req, res, next) {
         generatedUser.push({ email: user, activation_token: activation_token });
       }
       if (typeof user === "object") {
-        username = user.email.split("@")[0];
+        username = user.email.split("@")[0] + Date.now().toString();
         permission = user.permission;
         token = jwt.sign(
           { id: id, username: username },
@@ -811,13 +886,13 @@ async function bulkRegister(req, res, next) {
     }
     await transaction.commit();
     for (const genUser of generatedUser) {
-      const link = `${process.env.FRONTEND_URI}/register/${genUser.activation_token}`;
+      const link = `${process.env.FRONTEND_URI}/register-confirm?token=${genUser.activation_token}`;
       const mailOptions = {
         from: "UAlg Secure Vote",
-        to: body.email,
+        to: genUser.email,
         subject: "Register",
         text: "Thank you for registering in UAlg secure vote",
-        html: `<b>Hey ${body.display_name}! </b><br> Thank you for registering in UAlg secure vote<br>Please use the following link to complete your registration:<br><a href="${link}">${link}</a>`,
+        html: `<b>Hey ${genUser.email}! </b><br> Thank you for registering in UAlg secure vote<br>Please use the following link to complete your registration:<br><a href="${link}">${link}</a>`,
       };
       await transporter.sendMail(mailOptions, (error, info) => {
         if (error) {
@@ -829,7 +904,13 @@ async function bulkRegister(req, res, next) {
     return res.status(200).send("Inserted with success");
   } catch (err) {
     await transaction.rollback();
-    throw err;
+    await logger.insertSystemLog(
+      "/users/bulk-register",
+      err.message,
+      err.stack,
+      "POST"
+    );
+    return res.status(500).send("An error has occurred");
   }
 }
 
@@ -900,7 +981,12 @@ async function partialRegister(req, res, next) {
     );
     return res.status(200).json(1);
   } catch (err) {
-    await logger.insertSystemLog("register", err.message, "PATCH");
+    await logger.insertSystemLog(
+      "/users/register/:token",
+      err.message,
+      err.stack,
+      "PATCH"
+    );
     return res.status(500).send("An error has occurred");
   }
 }

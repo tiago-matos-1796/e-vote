@@ -1,13 +1,14 @@
 const express = require("express");
 const router = express.Router();
 const auth = require("../middleware/auth.middleware");
+const bulkAuth = require("../middleware/bulk-auth.middleware");
 const { access } = require("../middleware/permission.middleware");
 const { uploadAvatar } = require("../configs/multer.config");
 
 module.exports = (app) => {
   const userController = require("../controllers/users.controller");
   router.post("/", uploadAvatar.single("image"), userController.register);
-  router.post("/bulk-register", userController.bulkRegister);
+  router.post("/bulk-register", bulkAuth, userController.bulkRegister);
   router.post("/login", userController.login);
   router.post("/forgot-password", userController.forgotPassword);
   router.post(

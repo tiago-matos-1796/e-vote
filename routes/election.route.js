@@ -3,7 +3,6 @@ const router = express.Router();
 const auth = require("../middleware/auth.middleware");
 const { access } = require("../middleware/permission.middleware");
 const { uploadCandidateImage } = require("../configs/multer.config");
-const electionController = require("../controllers/election.controller");
 
 module.exports = (app) => {
   const electionController = require("../controllers/election.controller");

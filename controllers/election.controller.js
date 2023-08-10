@@ -12,6 +12,7 @@ const { client } = require("../configs/cassandra.config");
 const moment = require("moment");
 const fs = require("fs");
 const sharp = require("sharp");
+const logger = require("../utils/log.utils");
 
 async function listByVoter(req, res, next) {
   const token = req.cookies.token;
@@ -33,7 +34,13 @@ async function listByVoter(req, res, next) {
     }
     return res.status(200).json(elections);
   } catch (err) {
-    throw err;
+    await logger.insertSystemLog(
+      "/elections/voter",
+      err.message,
+      err.stack,
+      "GET"
+    );
+    return res.status(500).send("An error has occurred");
   }
 }
 
@@ -57,7 +64,13 @@ async function listByManager(req, res, next) {
     }
     return res.status(200).json(elections);
   } catch (err) {
-    throw err;
+    await logger.insertSystemLog(
+      "/elections/manager",
+      err.message,
+      err.stack,
+      "GET"
+    );
+    return res.status(500).send("An error has occurred");
   }
 }
 
@@ -94,7 +107,13 @@ async function showBallot(req, res, next) {
     };
     return res.status(200).json(electionObj);
   } catch (err) {
-    throw err;
+    await logger.insertSystemLog(
+      "/elections/:id",
+      err.message,
+      err.stack,
+      "GET"
+    );
+    return res.status(500).send("An error has occurred");
   }
 }
 
@@ -165,7 +184,13 @@ async function managerShow(req, res, next) {
     };
     return res.status(200).json(electionObj);
   } catch (err) {
-    throw err;
+    await logger.insertSystemLog(
+      "/elections/manager/:id",
+      err.message,
+      err.stack,
+      "GET"
+    );
+    return res.status(500).send("An error has occurred");
   }
 }
 
@@ -284,7 +309,8 @@ async function create(req, res, next) {
     return res.status(200).json(body);
   } catch (err) {
     await transaction.rollback();
-    throw err;
+    await logger.insertSystemLog("/elections/", err.message, err.stack, "POST");
+    return res.status(500).send("An error has occurred");
   }
 }
 
@@ -511,7 +537,13 @@ async function update(req, res, next) {
     return res.status(200).json(body);
   } catch (err) {
     await transaction.rollback();
-    throw err;
+    await logger.insertSystemLog(
+      "/elections/:id",
+      err.message,
+      err.stack,
+      "PUT"
+    );
+    return res.status(500).send("An error has occurred");
   }
 }
 
@@ -588,7 +620,13 @@ async function remove(req, res, next) {
     return res.status(200).json(1);
   } catch (err) {
     await transaction.rollback();
-    throw err;
+    await logger.insertSystemLog(
+      "/elections/:id",
+      err.message,
+      err.stack,
+      "DELETE"
+    );
+    return res.status(500).send("An error has occurred");
   }
 }
 
@@ -636,7 +674,13 @@ async function regenerateKeys(req, res, next) {
     await client.execute(log, logParams, { prepare: true });
     return res.status(200).json(1);
   } catch (err) {
-    throw err;
+    await logger.insertSystemLog(
+      "/elections/:id",
+      err.message,
+      err.stack,
+      "PATCH"
+    );
+    return res.status(500).send("An error has occurred");
   }
 }
 
@@ -654,7 +698,13 @@ async function createSignature(req, res, next) {
     );
     return res.status(200).json({ data: signature });
   } catch (err) {
-    throw err;
+    await logger.insertSystemLog(
+      "/elections/signature",
+      err.message,
+      err.stack,
+      "POST"
+    );
+    return res.status(500).send("An error has occurred");
   }
 }
 

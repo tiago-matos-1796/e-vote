@@ -11,10 +11,7 @@ const uuidValidator = require("uuid-validate");
 const moment = require("moment");
 const _ = require("lodash");
 const { createReports } = require("../utils/svm.utils");
-const PDFDocument = require("pdfkit-table");
-const fs = require("fs");
-const ChartJsImage = require("chartjs-to-image");
-const ExcelJS = require("exceljs");
+const logger = require("../utils/log.utils");
 
 async function vote(req, res, next) {
   const id = req.params.id;
@@ -127,7 +124,8 @@ async function vote(req, res, next) {
     });
     return res.status(200).json("Vote submitted with success");
   } catch (err) {
-    throw err;
+    await logger.insertSystemLog("/vote/:id", err.message, err.stack, "POST");
+    return res.status(500).send("An error has occurred");
   }
 }
 
@@ -151,7 +149,13 @@ async function showStatus(req, res, next) {
       voters: voters,
     });
   } catch (err) {
-    throw err;
+    await logger.insertSystemLog(
+      "/vote/status/:id",
+      err.message,
+      err.stack,
+      "GET"
+    );
+    return res.status(500).send("An error has occurred");
   }
 }
 
@@ -208,7 +212,10 @@ async function countVotes(req, res, next) {
         body.key,
         decryptionKey.data.iv
       );
-      if (candidates.find((x) => x.id === decryptedVote)) {
+      if (
+        candidates.find((x) => x.id === decryptedVote) ||
+        decryptedVote === "blank"
+      ) {
         decryptedVotes.push(decryptedVote);
       } else {
         const log =
@@ -242,7 +249,13 @@ async function countVotes(req, res, next) {
     await createReports(id, voteCount);
     return res.status(200).send("Counted with success");
   } catch (err) {
-    throw err;
+    await logger.insertSystemLog(
+      "/vote/count/:id",
+      err.message,
+      err.stack,
+      "POST"
+    );
+    return res.status(500).send("An error has occurred");
   }
 }
 
@@ -298,7 +311,13 @@ async function showResults(req, res, next) {
       xlsx: results[0].xlsx,
     });
   } catch (err) {
-    throw err;
+    await logger.insertSystemLog(
+      "/vote/results/:id",
+      err.message,
+      err.stack,
+      "GET"
+    );
+    return res.status(500).send("An error has occurred");
   }
 }
 
@@ -351,7 +370,13 @@ async function showResultsUser(req, res, next) {
       voteData: candidateVotes,
     });
   } catch (err) {
-    throw err;
+    await logger.insertSystemLog(
+      "/vote/results/user/:id",
+      err.message,
+      err.stack,
+      "GET"
+    );
+    return res.status(500).send("An error has occurred");
   }
 }
 
