@@ -595,7 +595,7 @@ async function showUsers(req, res, next) {
     }
     if (user[0].permission === "MANAGER") {
       const users = await sequelize.query(
-        "select id, email, display_name from e_vote_user where blocked = false;",
+        "select id, email, display_name from e_vote_user where blocked = false AND activation_token IS NULL AND partial_activation_token IS NULL;",
         {
           type: QueryTypes.SELECT,
         }

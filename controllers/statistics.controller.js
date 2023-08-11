@@ -85,9 +85,8 @@ async function vote(req, res, next) {
       return next(createError(400, `Vote content could not be validated`));
     }
     const signaturePublicKey = await kms.getSignaturePublicKey(decodedToken.id);
-    if (
-      !encryption.verify(body.vote, signaturePublicKey.data.key, body.signature)
-    ) {
+    console.log(body.signature);
+    if (!encryption.verify(body.vote, signaturePublicKey.key, body.signature)) {
       const log =
         "INSERT INTO election_log (id, log_creation, election_id, log, severity) VALUES (:id, :log_creation, :election_id, :log, :severity)";
       const logParams = {
@@ -208,7 +207,7 @@ async function countVotes(req, res, next) {
     for (const vote of votes.rows) {
       const decryptedVote = encryption.decrypt(
         vote.vote,
-        decryptionKey.data.key,
+        decryptionKey.key,
         body.key,
         decryptionKey.data.iv
       );

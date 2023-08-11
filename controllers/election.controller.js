@@ -77,7 +77,6 @@ async function listByManager(req, res, next) {
 async function showBallot(req, res, next) {
   const id = req.params.id;
   const token = req.cookies.token;
-  const userId = jwt.decode(token).id;
   if (!uuidValidator(id, 1)) {
     return next(createError(400, `id ${id} cannot be validated`));
   }
@@ -101,7 +100,7 @@ async function showBallot(req, res, next) {
     const electionObj = {
       id: election[0].election_id,
       title: election[0].title,
-      election_key: electionPublicKey.data.key,
+      election_key: electionPublicKey.key,
       hash_method: "sha512",
       candidates: candidates,
     };
@@ -140,7 +139,7 @@ async function managerShow(req, res, next) {
     const nonVoters = await sequelize.query(
       "select u.id, u.display_name, u.email\n" +
         "from e_vote_user u left join (select evu.id, evu.display_name from e_vote_election eve join e_vote_voter evv on eve.id = evv.election_id inner join e_vote_user evu on evu.id = evv.user_id where eve.id = :id) b on u.id=b.id\n" +
-        "where b.id is NULL and u.blocked = false;",
+        "where b.id is NULL and u.blocked = false AND activation_token IS NULL AND partial_activation_token IS NULL;",
       {
         type: QueryTypes.SELECT,
         replacements: { id: id },
@@ -156,7 +155,7 @@ async function managerShow(req, res, next) {
     const nonManagers = await sequelize.query(
       "select u.id, u.display_name, u.email\n" +
         "from e_vote_user u left join (select evu.id, evu.display_name from e_vote_election eve join e_vote_manager evm on eve.id = evm.election_id inner join e_vote_user evu on evu.id = evm.user_id where eve.id = :id) b on u.id=b.id\n" +
-        "where b.id is NULL and u.permission = 'MANAGER' and u.blocked = false;",
+        "where b.id is NULL and u.permission = 'MANAGER' and u.blocked = false AND activation_token IS NULL AND partial_activation_token IS NULL;",
       {
         type: QueryTypes.SELECT,
         replacements: { id: id },
@@ -692,9 +691,9 @@ async function createSignature(req, res, next) {
     const signaturePrivateKey = await kms.getSignaturePrivateKey(userId);
     const signature = encryption.sign(
       Buffer.from(body.data),
-      signaturePrivateKey.data.key,
+      signaturePrivateKey.key,
       body.key,
-      signaturePrivateKey.data.iv
+      signaturePrivateKey.iv
     );
     return res.status(200).json({ data: signature });
   } catch (err) {

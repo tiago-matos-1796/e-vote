@@ -24,12 +24,23 @@ async function insertSignature(id, publicKey, privateKey, iv) {
   };
   const uri = `${process.env.KMS_URI}keys/user`;
   try {
-    return await axios.post(uri, KMSEncrypt(JSON.stringify(keyObj)), {
-      headers: {
-        "access-token": process.env.KMS_TOKEN,
-        "Content-type": "application/json",
-      },
-    });
+    return await axios
+      .post(
+        uri,
+        { data: KMSEncrypt(JSON.stringify(keyObj)) },
+        {
+          headers: {
+            "access-token": process.env.KMS_TOKEN,
+            "Content-type": "application/json",
+          },
+        }
+      )
+      .then(() => {
+        return 1;
+      })
+      .catch(() => {
+        return 0;
+      });
   } catch (err) {
     console.error(err);
   }
@@ -44,12 +55,23 @@ async function insertElectionKeys(id, publicKey, privateKey, iv) {
   };
   const uri = `${process.env.KMS_URI}keys/election`;
   try {
-    return await axios.post(uri, KMSEncrypt(JSON.stringify(keyObj)), {
-      headers: {
-        "access-token": process.env.KMS_TOKEN,
-        "Content-type": "application/json",
-      },
-    });
+    return await axios
+      .post(
+        uri,
+        { data: KMSEncrypt(JSON.stringify(keyObj)) },
+        {
+          headers: {
+            "access-token": process.env.KMS_TOKEN,
+            "Content-type": "application/json",
+          },
+        }
+      )
+      .then(() => {
+        return 1;
+      })
+      .catch(() => {
+        return 0;
+      });
   } catch (err) {
     console.error(err);
   }
@@ -64,7 +86,7 @@ async function getElectionPublicKey(id) {
         "Content-type": "application/json",
       },
     });
-    return JSON.parse(KMSDecrypt(key));
+    return JSON.parse(KMSDecrypt(key.data));
   } catch (err) {
     console.error(err);
   }
@@ -79,7 +101,7 @@ async function getElectionPrivateKey(id) {
         "Content-type": "application/json",
       },
     });
-    return JSON.parse(KMSDecrypt(key));
+    return JSON.parse(KMSDecrypt(key.data));
   } catch (err) {
     console.error(err);
   }
@@ -94,7 +116,7 @@ async function getSignaturePrivateKey(id) {
         "Content-type": "application/json",
       },
     });
-    return JSON.parse(KMSDecrypt(key));
+    return JSON.parse(KMSDecrypt(key.data));
   } catch (err) {
     console.error(err);
   }
@@ -109,7 +131,7 @@ async function getSignaturePublicKey(id) {
         "Content-type": "application/json",
       },
     });
-    return JSON.parse(KMSDecrypt(key));
+    return JSON.parse(KMSDecrypt(key.data));
   } catch (err) {
     console.error(err);
   }
@@ -123,12 +145,23 @@ async function updateElectionKeys(id, publicKey, privateKey, iv) {
     iv: iv,
   };
   try {
-    return await axios.patch(uri, KMSEncrypt(JSON.stringify(keyObj)), {
-      headers: {
-        "access-token": process.env.KMS_TOKEN,
-        "Content-type": "application/json",
-      },
-    });
+    return await axios
+      .patch(
+        uri,
+        { data: KMSEncrypt(JSON.stringify(keyObj)) },
+        {
+          headers: {
+            "access-token": process.env.KMS_TOKEN,
+            "Content-type": "application/json",
+          },
+        }
+      )
+      .then(() => {
+        return 1;
+      })
+      .catch(() => {
+        return 0;
+      });
   } catch (err) {
     console.error(err);
   }
@@ -142,12 +175,23 @@ async function updateSignatureKeys(id, publicKey, privateKey, iv) {
     iv: iv,
   };
   try {
-    return await axios.patch(uri, KMSEncrypt(JSON.stringify(keyObj)), {
-      headers: {
-        "access-token": process.env.KMS_TOKEN,
-        "Content-type": "application/json",
-      },
-    });
+    return await axios
+      .patch(
+        uri,
+        { data: KMSEncrypt(JSON.stringify(keyObj)) },
+        {
+          headers: {
+            "access-token": process.env.KMS_TOKEN,
+            "Content-type": "application/json",
+          },
+        }
+      )
+      .then(() => {
+        return 1;
+      })
+      .catch(() => {
+        return 0;
+      });
   } catch (err) {
     console.error(err);
   }
@@ -156,12 +200,19 @@ async function updateSignatureKeys(id, publicKey, privateKey, iv) {
 async function deleteElectionKeys(id) {
   const uri = `${process.env.KMS_URI}keys/election/${id}`;
   try {
-    return await axios.delete(uri, {
-      headers: {
-        "access-token": process.env.KMS_TOKEN,
-        "Content-type": "application/json",
-      },
-    });
+    return await axios
+      .delete(uri, {
+        headers: {
+          "access-token": process.env.KMS_TOKEN,
+          "Content-type": "application/json",
+        },
+      })
+      .then(() => {
+        return 1;
+      })
+      .catch(() => {
+        return 0;
+      });
   } catch (err) {
     console.error(err);
   }
@@ -170,12 +221,19 @@ async function deleteElectionKeys(id) {
 async function deleteSignatureKeys(id) {
   const uri = `${process.env.KMS_URI}keys/user/${id}`;
   try {
-    return await axios.delete(uri, {
-      headers: {
-        "access-token": process.env.KMS_TOKEN,
-        "Content-type": "application/json",
-      },
-    });
+    return await axios
+      .delete(uri, {
+        headers: {
+          "access-token": process.env.KMS_TOKEN,
+          "Content-type": "application/json",
+        },
+      })
+      .then(() => {
+        return 1;
+      })
+      .catch(() => {
+        return 0;
+      });
   } catch (err) {
     console.error(err);
   }
