@@ -229,7 +229,14 @@ async function countVotes(req, res, next) {
         await client.execute(log, logParams, { prepare: true });
       }
     }
-    const voteCount = _.countBy(decryptedVotes);
+    let voteCount = {};
+    if (decryptedVotes.length === 0) {
+      for (const c of candidates) {
+        voteCount[c.id] = 0;
+      }
+    } else {
+      voteCount = _.countBy(decryptedVotes);
+    }
     const results = encryption.internalEncrypt(JSON.stringify(voteCount));
     const log =
       "INSERT INTO election_log (id, log_creation, election_id, election_title, log, severity) VALUES (:id, :log_creation, :election_id, :election_title, :log, :severity)";

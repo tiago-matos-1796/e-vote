@@ -571,13 +571,13 @@ async function remove(req, res, next) {
     );
     if (
       moment().isBetween(
-        moment(election[0].start_date),
-        moment(election[0].end_date)
+        moment(election[0].start_date, "DD-MM-YYYY HH:mm"),
+        moment(election[0].end_date, "DD-MM-YYYY HH:mm")
       )
     ) {
       return next(createError(400, `Ongoing election`));
     }
-    if (moment().isAfter(moment(election[0].end_date))) {
+    if (moment().isAfter(moment(election[0].end_date, "DD-MM-YYYY HH:mm"))) {
       return next(createError(400, `Election has ended`));
     }
     for (const image of candidateImages) {
