@@ -209,7 +209,7 @@ async function countVotes(req, res, next) {
         vote.vote,
         decryptionKey.key,
         body.key,
-        decryptionKey.data.iv
+        decryptionKey.iv
       );
       if (
         candidates.find((x) => x.id === decryptedVote) ||
@@ -230,12 +230,9 @@ async function countVotes(req, res, next) {
       }
     }
     let voteCount = {};
-    if (decryptedVotes.length === 0) {
-      for (const c of candidates) {
-        voteCount[c.id] = 0;
-      }
-    } else {
-      voteCount = _.countBy(decryptedVotes);
+    const count = _.countBy(decryptedVotes);
+    for (const c of candidates) {
+      voteCount[c.id] = count[c.id] ? count[c.id] : 0;
     }
     const results = encryption.internalEncrypt(JSON.stringify(voteCount));
     const log =
