@@ -1,7 +1,5 @@
-const db = require("../models");
 const createError = require("http-errors");
 const jwt = require("jsonwebtoken");
-const config = process.env;
 const uuid = require("uuid");
 const { sequelize } = require("../models/index");
 const encryption = require("../services/encryption.service");
@@ -338,13 +336,13 @@ async function update(req, res, next) {
     );
     if (
       moment().isBetween(
-        moment(election[0].start_date),
-        moment(election[0].end_date)
+        moment(election[0].start_date, "DD-MM-YYYY HH:mm"),
+        moment(election[0].end_date, "DD-MM-YYYY HH:mm")
       )
     ) {
       return next(createError(400, `Ongoing election`));
     }
-    if (moment().isAfter(moment(election[0].end_date))) {
+    if (moment().isAfter(moment(election[0].end_date, "DD-MM-YYYY HH:mm"))) {
       return next(createError(400, `Election has ended`));
     }
     await sequelize.query(

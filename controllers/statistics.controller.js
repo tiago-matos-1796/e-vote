@@ -234,6 +234,7 @@ async function countVotes(req, res, next) {
     for (const c of candidates) {
       voteCount[c.id] = count[c.id] ? count[c.id] : 0;
     }
+    voteCount["blank"] = count["blank"] ? count["blank"] : 0;
     const results = encryption.internalEncrypt(JSON.stringify(voteCount));
     const log =
       "INSERT INTO election_log (id, log_creation, election_id, election_title, log, severity) VALUES (:id, :log_creation, :election_id, :election_title, :log, :severity)";
@@ -300,8 +301,16 @@ async function showResults(req, res, next) {
       candidate["votes"] = decryptedResults[candidate.id];
       candidateVotes.push([candidate.name, decryptedResults[candidate.id]]);
     }
+    candidateVotes.push([
+      "Blank",
+      decryptedResults["blank"] ? decryptedResults["blank"] : 0,
+    ]);
     const voted = voters.filter((x) => x.voted !== null).length;
     const notVoted = voters.length - voted;
+    candidates.push({
+      name: "Blank",
+      votes: decryptedResults["blank"] ? decryptedResults["blank"] : 0,
+    });
     return res.status(200).json({
       candidates: candidates,
       voters: voters,
@@ -362,8 +371,16 @@ async function showResultsUser(req, res, next) {
       candidate["votes"] = decryptedResults[candidate.id];
       candidateVotes.push([candidate.name, decryptedResults[candidate.id]]);
     }
+    candidateVotes.push([
+      "Blank",
+      decryptedResults["blank"] ? decryptedResults["blank"] : 0,
+    ]);
     const voted = voters.filter((x) => x.voted !== null).length;
     const notVoted = voters.length - voted;
+    candidates.push({
+      name: "Blank",
+      votes: decryptedResults["blank"] ? decryptedResults["blank"] : 0,
+    });
     return res.status(200).json({
       candidates: candidates,
       abstention: [

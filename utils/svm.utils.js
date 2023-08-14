@@ -25,6 +25,7 @@ async function createReports(id, results) {
     candidate["votes"] = results[candidate.id];
     candidateVotes.push([candidate.name, results[candidate.id]]);
   }
+  candidateVotes.push(["blank", results["blank"] ? results["blank"] : 0]);
   const voted = voters.filter((x) => x.voted !== null).length;
   const notVoted = voters.length - voted;
   /*-----------------------------PDF--------------------------------*/
@@ -107,6 +108,10 @@ async function createReports(id, results) {
       votes: results[candidate.id],
     });
   }
+  xlsxCandidateVotes.push({
+    candidate: "blank",
+    votes: results["blank"] ? results["blank"] : 0,
+  });
   for (const v of voters) {
     electionVoters.push({
       displayName: v.display_name,
