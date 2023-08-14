@@ -1,7 +1,5 @@
-const db = require("../models");
 const createError = require("http-errors");
 const jwt = require("jsonwebtoken");
-const config = process.env;
 const uuid = require("uuid");
 const { sequelize } = require("../models/index");
 const encryption = require("../services/encryption.service");

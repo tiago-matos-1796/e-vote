@@ -1,17 +1,12 @@
-const express = require('express');
+const express = require("express");
 const router = express.Router();
-const userRoutes = require('./users.route');
-const electionRoutes = require('./election.route');
-const voteRoutes = require('./statistics.route');
-const logRoutes = require('./log.route');
+const userRoutes = require("./users.route");
+const electionRoutes = require("./election.route");
+const voteRoutes = require("./statistics.route");
+const logRoutes = require("./log.route");
 
-/* GET home page. */
-router.get('/', function(req, res, next) {
-  res.render('index', { title: 'Express' });
-});
-
-router.use('/users', userRoutes);
-router.use('/elections', electionRoutes);
-router.use('/vote', voteRoutes);
-router.use('/log', logRoutes);
+router.use("/users", userRoutes);
+router.use("/elections", electionRoutes);
+router.use("/vote", voteRoutes);
+router.use("/log", logRoutes);
 module.exports = router;
