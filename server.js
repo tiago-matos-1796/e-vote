@@ -7,6 +7,7 @@ const cookieParser = require("cookie-parser");
 const path = require("path");
 const auth = require("./middleware/auth.middleware");
 const permission = require("./middleware/permission.middleware");
+const { limiter } = require("./middleware/limiter.middleware");
 
 const app = express();
 
@@ -70,6 +71,7 @@ app.use(
   })
 );
 
+app.use(limiter);
 app.disable("x-powered-by");
 
 // set port, listen for requests
