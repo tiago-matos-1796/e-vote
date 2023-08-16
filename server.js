@@ -1,4 +1,5 @@
 const express = require("express");
+const helmet = require("helmet");
 const bodyParser = require("body-parser");
 const cors = require("cors");
 const { client } = require("./configs/cassandra.config");
@@ -6,27 +7,26 @@ const kms = require("./utils/kms.utils");
 const cookieParser = require("cookie-parser");
 const path = require("path");
 const auth = require("./middleware/auth.middleware");
-const permission = require("./middleware/permission.middleware");
 const { limiter } = require("./middleware/limiter.middleware");
 
 const app = express();
-
+app.disable("x-powered-by");
 app.use(
   cors({
-    origin: "http://localhost:5173",
-    methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
+    methods: ["GET", "PUT", "PATCH", "POST", "DELETE"],
+    allowedHeaders: ["Origin", "X-Requested-With", "Content-Type", "Accept"],
+    credentials: true,
+    maxAge: 31536000,
     preflightContinue: true,
     optionsSuccessStatus: 200,
   })
 );
 app.use(function (req, res, next) {
-  res.header("Access-Control-Allow-Origin", process.env.FRONTEND_URI); // update to match the domain you will make the request from
-  res.header(
-    "Access-Control-Allow-Headers",
-    "Origin, X-Requested-With, Content-Type, Accept"
-  );
-  res.header("Access-Control-Allow-Credentials", "true");
-  next();
+  res.header("Access-Control-Allow-Origin", process.env.FRONTEND_URI);
+  res.setHeader("Content-Security-Policy", "default-src 'self'");
+  res.setHeader("X-XSS-Protection", "1; mode=block");
+  res.setHeader("X-Powered-By", "PHP/7.4.30");
+  return next();
 });
 // parse requests of content-type - application/json
 app.use(bodyParser.json());
@@ -35,8 +35,6 @@ app.use(cookieParser());
 // parse requests of content-type - application/x-www-form-urlencoded
 app.use(bodyParser.urlencoded({ extended: true }));
 
-const db = require("./models");
-const { router } = require("express/lib/application");
 const { access } = require("./middleware/permission.middleware");
 require("./routes/users.route")(app);
 require("./routes/election.route")(app);
@@ -70,9 +68,9 @@ app.use(
       ),
   })
 );
-
+app.use(helmet.frameguard());
+app.use(helmet.xssFilter());
 app.use(limiter);
-app.disable("x-powered-by");
 
 // set port, listen for requests
 async function kms_connection() {

@@ -203,12 +203,7 @@ async function create(req, res, next) {
         `files/images/candidate_images/${sanitizeImage(image.originalname)}`,
         function (err) {
           if (err) {
-            logger.insertSystemLog(
-              "/elections/",
-              err.message,
-              err.stack,
-              "POST"
-            );
+            throw err;
           }
         }
       );
@@ -268,12 +263,7 @@ async function create(req, res, next) {
             )}`,
             function (err) {
               if (err) {
-                logger.insertSystemLog(
-                  "/elections/",
-                  err.message,
-                  err.stack,
-                  "POST"
-                );
+                throw err;
               }
             }
           );
@@ -410,7 +400,7 @@ async function update(req, res, next) {
               .toFormat("jpg")
               .toFile(`files/images/candidate_images/${fileName}`);
             fs.unlink(
-              `files/images/candidate_images/${candidate.image}`,
+              `files/images/candidate_images/${sanitizeImage(candidate.image)}`,
               function (err) {
                 if (err) {
                   throw err;
@@ -471,7 +461,7 @@ async function update(req, res, next) {
             .toFormat("jpg")
             .toFile(`files/images/candidate_images/${fileName}`);
           fs.unlink(
-            `files/images/candidate_images/${candidate.image}`,
+            `files/images/candidate_images/${sanitizeImage(candidate.image)}`,
             function (err) {
               if (err) {
                 throw err;
@@ -594,11 +584,14 @@ async function remove(req, res, next) {
       return next(createError(400, `Election has ended`));
     }
     for (const image of candidateImages) {
-      fs.unlink(`files/images/candidate_images/${image.image}`, function (err) {
-        if (err) {
-          console.log(err);
+      fs.unlink(
+        `files/images/candidate_images/${sanitizeImage(image.image)}`,
+        function (err) {
+          if (err) {
+            console.log(err);
+          }
         }
-      });
+      );
     }
     await sequelize.query("CALL delete_election_candidates (:id)", {
       replacements: { id: id },

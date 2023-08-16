@@ -163,6 +163,9 @@ async function countVotes(req, res, next) {
   const body = req.body;
   const token = req.cookies.token;
   const username = jwt.decode(token).username;
+  if (!uuidValidator(id, 1)) {
+    return next(createError(400, `id ${id} cannot be validated`));
+  }
   try {
     const election = await sequelize.query(
       "SELECT * from e_vote_election WHERE id = :id",

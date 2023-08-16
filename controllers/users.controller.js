@@ -17,19 +17,23 @@ const sharp = require("sharp");
 const moment = require("moment/moment");
 const { transporter } = require("../configs/smtp.config");
 const logger = require("../utils/log.utils");
+const xss = require("xss");
+const sanitizeImage = require("sanitize-filename");
 
-// DONE
 async function register(req, res, next) {
   const body = req.body;
   let image = req.file ? req.file.filename : null;
   try {
     if (!emailValidator.validate(body.email)) {
       if (image) {
-        fs.unlink(`files/images/avatars/${image}`, function (err) {
-          if (err) {
-            throw err;
+        fs.unlink(
+          `files/images/avatars/${sanitizeImage(image)}`,
+          function (err) {
+            if (err) {
+              throw err;
+            }
           }
-        });
+        );
       }
       return next(
         createError(400, `Email ${body.email} is not in correct format`)
@@ -52,11 +56,14 @@ async function register(req, res, next) {
       const bEmail = blacklist.find((x) => x.email === body.email);
       if (bEmail) {
         if (image) {
-          fs.unlink(`files/images/avatars/${image}`, function (err) {
-            if (err) {
-              throw err;
+          fs.unlink(
+            `files/images/avatars/${sanitizeImage(image)}`,
+            function (err) {
+              if (err) {
+                throw err;
+              }
             }
-          });
+          );
         }
         return next(
           createError(400, `Email ${body.email} is not permitted to register`)
@@ -65,21 +72,27 @@ async function register(req, res, next) {
     }
     if (result.length > 0) {
       if (image) {
-        fs.unlink(`files/images/avatars/${image}`, function (err) {
-          if (err) {
-            throw err;
+        fs.unlink(
+          `files/images/avatars/${sanitizeImage(image)}`,
+          function (err) {
+            if (err) {
+              throw err;
+            }
           }
-        });
+        );
       }
       return next(createError(409, `Email ${body.email} already in use`));
     }
     if (body.password.length < 8) {
       if (image) {
-        fs.unlink(`files/images/avatars/${image}`, function (err) {
-          if (err) {
-            throw err;
+        fs.unlink(
+          `files/images/avatars/${sanitizeImage(image)}`,
+          function (err) {
+            if (err) {
+              throw err;
+            }
           }
-        });
+        );
       }
       return next(
         createError(400, `Password must have at least a length of 8`)
@@ -87,11 +100,14 @@ async function register(req, res, next) {
     }
     if (body.sign_key.length !== 16) {
       if (image) {
-        fs.unlink(`files/images/avatars/${image}`, function (err) {
-          if (err) {
-            throw err;
+        fs.unlink(
+          `files/images/avatars/${sanitizeImage(image)}`,
+          function (err) {
+            if (err) {
+              throw err;
+            }
           }
-        });
+        );
       }
       return next(createError(400, `Signature key must have a length of 16`));
     }
@@ -109,11 +125,14 @@ async function register(req, res, next) {
     if (key.status !== 201) {
       if (key.status === 400) {
         if (image) {
-          fs.unlink(`files/images/avatars/${image}`, function (err) {
-            if (err) {
-              throw err;
+          fs.unlink(
+            `files/images/avatars/${sanitizeImage(image)}`,
+            function (err) {
+              if (err) {
+                throw err;
+              }
             }
-          });
+          );
         }
         return next(createError(400, `Duplicate key`));
       } else {
@@ -128,7 +147,7 @@ async function register(req, res, next) {
         .resize(180, 180)
         .toFormat("jpg")
         .toFile(`files/images/avatars/${fileName}`);
-      fs.unlink(`files/images/avatars/${image}`, function (err) {
+      fs.unlink(`files/images/avatars/${sanitizeImage(image)}`, function (err) {
         if (err) {
           throw err;
         }
@@ -163,15 +182,14 @@ async function register(req, res, next) {
       text: "Thank you for registering in UAlg secure vote",
       html: `<b>Hey ${body.display_name}! </b><br> Thank you for registering in UAlg secure vote<br>Please use the following link to verify your account:<br><a href="${link}">${link}</a>`,
     };
-    await transporter.sendMail(mailOptions, (error, info) => {
-      if (error) {
-        return console.log(error);
+    await transporter.sendMail(mailOptions, (err, info) => {
+      if (err) {
+        throw err;
       }
-      console.log("Message sent: %s", info.messageId);
     });
     return res.status(200).json(1);
   } catch (err) {
-    fs.unlink(`files/images/avatars/${image}`, function (err) {
+    fs.unlink(`files/images/avatars/${sanitizeImage(image)}`, function (err) {
       if (err) {
         throw err;
       }
@@ -210,11 +228,10 @@ async function verify(req, res, next) {
   }
 }
 
-// DONE
 async function login(req, res, next) {
   const body = req.body;
   try {
-    if (!emailValidator.validate(body.email)) {
+    if (!emailValidator.validate(xss.filterXSS(body.email))) {
       return next(
         createError(400, `Email ${body.email} is not in correct format`)
       );
@@ -223,7 +240,7 @@ async function login(req, res, next) {
       "SELECT * from e_vote_user WHERE email = :email AND blocked = false",
       {
         type: QueryTypes.SELECT,
-        replacements: { email: body.email },
+        replacements: { email: xss.filterXSS(body.email) },
       }
     );
 
@@ -235,7 +252,10 @@ async function login(req, res, next) {
         )
       );
     } else {
-      const compare = await bcrypt.compare(body.password, user[0].password);
+      const compare = await bcrypt.compare(
+        xss.filterXSS(body.password),
+        user[0].password
+      );
       if (!compare) {
         return next(createError(400, `Email and/or password is wrong`));
       }
@@ -350,7 +370,6 @@ async function passwordRecovery(req, res, next) {
   }
 }
 
-// DONE
 async function update(req, res, next) {
   const id = req.params.id;
   const file = req.file;
@@ -384,11 +403,14 @@ async function update(req, res, next) {
           .resize(180, 180)
           .toFormat("jpg")
           .toFile(`files/images/avatars/${fileName}`);
-        fs.unlink(`files/images/avatars/${file.filename}`, function (err) {
-          if (err) {
-            throw err;
+        fs.unlink(
+          `files/images/avatars/${sanitizeImage(file.filename)}`,
+          function (err) {
+            if (err) {
+              throw err;
+            }
           }
-        });
+        );
         if (user[0].image) {
           fs.unlink(`files/images/avatars/${user[0].image}`, function (err) {
             if (err) {
@@ -434,7 +456,6 @@ async function update(req, res, next) {
   }
 }
 
-// DONE check if user belongs to an active election, do not delete if its the case
 async function remove(req, res, next) {
   const id = req.params.id;
   const token = req.cookies.token;
@@ -942,11 +963,14 @@ async function partialRegister(req, res, next) {
     if (key.status !== 201) {
       if (key.status === 400) {
         if (image) {
-          fs.unlink(`files/images/avatars/${image}`, function (err) {
-            if (err) {
-              throw err;
+          fs.unlink(
+            `files/images/avatars/${sanitizeImage(image)}`,
+            function (err) {
+              if (err) {
+                throw err;
+              }
             }
-          });
+          );
         }
         return next(createError(400, `Duplicate key`));
       } else {
@@ -961,7 +985,7 @@ async function partialRegister(req, res, next) {
         .resize(180, 180)
         .toFormat("jpg")
         .toFile(`files/images/avatars/${fileName}`);
-      fs.unlink(`files/images/avatars/${image}`, function (err) {
+      fs.unlink(`files/images/avatars/${sanitizeImage(image)}`, function (err) {
         if (err) {
           throw err;
         }
