@@ -11,6 +11,7 @@ const moment = require("moment");
 const fs = require("fs");
 const sharp = require("sharp");
 const logger = require("../utils/log.utils");
+const sanitizeImage = require("sanitize-filename");
 
 async function listByVoter(req, res, next) {
   const token = req.cookies.token;
@@ -199,10 +200,15 @@ async function create(req, res, next) {
   if (body.candidates.length === 0) {
     for (const image of req.files) {
       fs.unlink(
-        `files/images/candidate_images/${image.originalname}`,
+        `files/images/candidate_images/${sanitizeImage(image.originalname)}`,
         function (err) {
           if (err) {
-            throw err;
+            logger.insertSystemLog(
+              "/elections/",
+              err.message,
+              err.stack,
+              "POST"
+            );
           }
         }
       );
@@ -250,15 +256,24 @@ async function create(req, res, next) {
           const fileName = `${Date.now()}-${Math.round(Math.random() * 1e9)}_${
             c.image
           }`;
-          await sharp(`files/images/candidate_images/${image.originalname}`)
+          await sharp(
+            `files/images/candidate_images/${sanitizeImage(image.originalname)}`
+          )
             .resize(300, 300)
             .toFormat("jpg")
             .toFile(`files/images/candidate_images/${fileName}`);
           fs.unlink(
-            `files/images/candidate_images/${image.originalname}`,
+            `files/images/candidate_images/${sanitizeImage(
+              image.originalname
+            )}`,
             function (err) {
               if (err) {
-                throw err;
+                logger.insertSystemLog(
+                  "/elections/",
+                  err.message,
+                  err.stack,
+                  "POST"
+                );
               }
             }
           );
