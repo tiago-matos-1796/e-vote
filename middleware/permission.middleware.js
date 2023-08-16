@@ -2,10 +2,18 @@ const jwt = require("jsonwebtoken");
 const db = require("../models");
 const { sequelize } = require("../models/index");
 const { QueryTypes } = require("sequelize");
+const createError = require("http-errors");
 const access = (permissions) => {
   return async (req, res, next) => {
     const token = req.cookies.token;
-    const id = jwt.decode(token).id;
+    let id = "";
+    jwt.verify(token, process.env.JWT_SECRET, {}, function (err, decoded) {
+      if (err) {
+        res.status(401).send("Invalid Token");
+      } else {
+        id = decoded.id;
+      }
+    });
     const user = await sequelize.query(
       "SELECT * FROM e_vote_user WHERE id = :id",
       {

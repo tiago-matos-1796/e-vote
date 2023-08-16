@@ -220,18 +220,20 @@ async function create(req, res, next) {
       username = decoded.username;
     }
   });
-  if (body.candidates.length === 0) {
-    for (const image of req.files) {
-      fs.unlink(
-        `files/images/candidate_images/${sanitizeImage(image.originalname)}`,
-        function (err) {
-          if (err) {
-            throw err;
+  if (Array.isArray(body.candidates)) {
+    if (body.candidates.length === 0) {
+      for (const image of req.files) {
+        fs.unlink(
+          `files/images/candidate_images/${sanitizeImage(image.originalname)}`,
+          function (err) {
+            if (err) {
+              throw err;
+            }
           }
-        }
-      );
+        );
+      }
+      return next(createError(400, `Election must have at least 1 candidate`));
     }
-    return next(createError(400, `Election must have at least 1 candidate`));
   }
   const transaction = await sequelize.transaction();
   try {
@@ -354,11 +356,15 @@ async function update(req, res, next) {
   if (!uuidValidator(id, 1)) {
     return next(createError(400, `id ${id} cannot be validated`));
   }
-  if (body.candidates.length === 0) {
-    return next(createError(400, `Election must have at least 1 candidate`));
+  if (Array.isArray(body.candidates)) {
+    if (body.candidates.length === 0) {
+      return next(createError(400, `Election must have at least 1 candidate`));
+    }
   }
-  if (body.managers.length === 0) {
-    return next(createError(400, `Election must have at least 1 manager`));
+  if (Array.isArray(body.candidates)) {
+    if (body.managers.length === 0) {
+      return next(createError(400, `Election must have at least 1 manager`));
+    }
   }
   const transaction = await sequelize.transaction();
   try {

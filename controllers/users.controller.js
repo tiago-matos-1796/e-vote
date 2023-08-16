@@ -83,36 +83,43 @@ async function register(req, res, next) {
       }
       return next(createError(409, `Email ${body.email} already in use`));
     }
-    if (body.password.length < 8) {
-      if (image) {
-        fs.unlink(
-          `files/images/avatars/${sanitizeImage(image)}`,
-          function (err) {
-            if (err) {
-              throw err;
+    if (typeof body.password === "string") {
+      if (body.password.length < 8) {
+        if (image) {
+          fs.unlink(
+            `files/images/avatars/${sanitizeImage(image)}`,
+            function (err) {
+              if (err) {
+                throw err;
+              }
             }
-          }
+          );
+        }
+        return next(
+          createError(400, `Password must have at least a length of 8`)
         );
       }
-      return next(
-        createError(400, `Password must have at least a length of 8`)
-      );
     }
-    if (body.sign_key.length !== 16) {
-      if (image) {
-        fs.unlink(
-          `files/images/avatars/${sanitizeImage(image)}`,
-          function (err) {
-            if (err) {
-              throw err;
+    if (typeof body.sign_key === "string") {
+      if (body.sign_key.length !== 16) {
+        if (image) {
+          fs.unlink(
+            `files/images/avatars/${sanitizeImage(image)}`,
+            function (err) {
+              if (err) {
+                throw err;
+              }
             }
-          }
-        );
+          );
+        }
+        return next(createError(400, `Signature key must have a length of 16`));
       }
-      return next(createError(400, `Signature key must have a length of 16`));
     }
     const keys = encryption.generateSignatureKeys(body.sign_key);
-    const username = body.email.split("@")[0] + Date.now().toString();
+    const username =
+      typeof body.email === "string"
+        ? body.email.split("@")[0] + Date.now().toString()
+        : "user" + Date.now().toString();
     const password = await bcrypt.hash(body.password, 13);
     const id = uuid.v1();
     const token = jwt.sign({ id: id, username: username }, config.JWT_SECRET);
@@ -267,7 +274,7 @@ async function login(req, res, next) {
     return res.status(200).json({
       id: user.id,
       email: user.email,
-      displayName: user.displayName,
+      displayName: user.display_name,
       username: user.username,
       image: user.image,
       permissions: user.permission,
@@ -445,21 +452,23 @@ async function update(req, res, next) {
     } else {
       imageName = user[0].image;
     }
-    const password =
-      body.password.length > 0
-        ? await bcrypt.hash(body.password, 13)
-        : user[0].password;
-    await sequelize.query(
-      "CALL update_user (:id, :display_name, :password, :image);",
-      {
-        replacements: {
-          id: id,
-          display_name: body.displayName,
-          password: password,
-          image: imageName,
-        },
-      }
-    );
+    if (typeof body.password === "string") {
+      const password =
+        body.password.length > 0
+          ? await bcrypt.hash(body.password, 13)
+          : user[0].password;
+      await sequelize.query(
+        "CALL update_user (:id, :display_name, :password, :image);",
+        {
+          replacements: {
+            id: id,
+            display_name: body.displayName,
+            password: password,
+            image: imageName,
+          },
+        }
+      );
+    }
     return res
       .status(200)
       .json({ display_name: body.displayName, image: imageName });
@@ -682,6 +691,14 @@ async function showUsers(req, res, next) {
 async function changePermissions(req, res, next) {
   const id = req.params.id; // id of user in which permissions will be changed
   const permission = req.body.permission;
+  let userId = "";
+  jwt.verify(token, process.env.JWT_SECRET, {}, function (err, decoded) {
+    if (err) {
+      return next(createError(401, "Invalid Token"));
+    } else {
+      userId = decoded.id;
+    }
+  });
   if (!uuidValidator(id, 1)) {
     return next(createError(400, `id ${id} cannot be validated`));
   }
@@ -690,13 +707,12 @@ async function changePermissions(req, res, next) {
       createError(400, `Permission ${permission} is not a valid permission`)
     );
   }
-  const token = req.cookies.token;
   try {
     const admin = await sequelize.query(
       "SELECT id, username, permission FROM e_vote_user WHERE id = :id",
       {
         type: QueryTypes.SELECT,
-        replacements: { id: jwt.decode(token).id },
+        replacements: { id: userId },
       }
     );
     const user = await sequelize.query(
