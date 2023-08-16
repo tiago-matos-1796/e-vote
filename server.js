@@ -7,7 +7,6 @@ const kms = require("./utils/kms.utils");
 const cookieParser = require("cookie-parser");
 const path = require("path");
 const auth = require("./middleware/auth.middleware");
-const { limiter } = require("./middleware/limiter.middleware");
 
 const app = express();
 app.disable("x-powered-by");
@@ -70,7 +69,6 @@ app.use(
 );
 app.use(helmet.frameguard());
 app.use(helmet.xssFilter());
-app.use(limiter);
 
 // set port, listen for requests
 async function kms_connection() {

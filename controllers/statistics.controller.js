@@ -19,11 +19,13 @@ async function vote(req, res, next) {
   const body = req.body;
   const token = req.cookies.token;
   let decodedToken = "";
-  if (jwt.verify(token, process.env.JWT_SECRET)) {
-    decodedToken = jwt.decode(token);
-  } else {
-    return next(createError(401, "Invalid Token"));
-  }
+  jwt.verify(token, process.env.JWT_SECRET, {}, function (err, decoded) {
+    if (err) {
+      return next(createError(401, "Invalid Token"));
+    } else {
+      decodedToken = decoded;
+    }
+  });
   if (!uuidValidator(id, 1)) {
     return next(createError(400, `id ${id} cannot be validated`));
   }
@@ -169,11 +171,13 @@ async function countVotes(req, res, next) {
   const body = req.body;
   const token = req.cookies.token;
   let username = "";
-  if (jwt.verify(token, process.env.JWT_SECRET)) {
-    username = jwt.decode(token).username;
-  } else {
-    return next(createError(401, "Invalid Token"));
-  }
+  jwt.verify(token, process.env.JWT_SECRET, {}, function (err, decoded) {
+    if (err) {
+      return next(createError(401, "Invalid Token"));
+    } else {
+      username = decoded.username;
+    }
+  });
   if (!uuidValidator(id, 1)) {
     return next(createError(400, `id ${id} cannot be validated`));
   }

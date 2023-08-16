@@ -16,11 +16,13 @@ const sanitizeImage = require("sanitize-filename");
 async function listByVoter(req, res, next) {
   const token = req.cookies.token;
   let userId = "";
-  if (jwt.verify(token, process.env.JWT_SECRET)) {
-    userId = jwt.decode(token).id;
-  } else {
-    return next(createError(401, "Invalid Token"));
-  }
+  jwt.verify(token, process.env.JWT_SECRET, {}, function (err, decoded) {
+    if (err) {
+      return next(createError(401, "Invalid Token"));
+    } else {
+      userId = decoded.id;
+    }
+  });
   try {
     const elections = await sequelize.query(
       "select eve.id, eve.title, eve.start_date, eve.end_date, eve.created_at, eve.results, evv.voted from e_vote_election eve inner join e_vote_voter evv on eve.id = evv.election_id where evv.user_id = :id",
@@ -51,11 +53,13 @@ async function listByVoter(req, res, next) {
 async function listByManager(req, res, next) {
   const token = req.cookies.token;
   let userId = "";
-  if (jwt.verify(token, process.env.JWT_SECRET)) {
-    userId = jwt.decode(token).id;
-  } else {
-    return next(createError(401, "Invalid Token"));
-  }
+  jwt.verify(token, process.env.JWT_SECRET, {}, function (err, decoded) {
+    if (err) {
+      return next(createError(401, "Invalid Token"));
+    } else {
+      userId = decoded.id;
+    }
+  });
   try {
     const elections = await sequelize.query(
       "select eve.id, eve.title, eve.start_date, eve.end_date, eve.created_at, eve.results from e_vote_election eve inner join e_vote_manager evm on eve.id = evm.election_id where evm.user_id = :id;",
@@ -208,12 +212,14 @@ async function create(req, res, next) {
   const token = req.cookies.token;
   let userId = "";
   let username = "";
-  if (jwt.verify(token, process.env.JWT_SECRET)) {
-    userId = jwt.decode(token).id;
-    username = jwt.decode(token).username;
-  } else {
-    return next(createError(401, "Invalid Token"));
-  }
+  jwt.verify(token, process.env.JWT_SECRET, {}, function (err, decoded) {
+    if (err) {
+      return next(createError(401, "Invalid Token"));
+    } else {
+      userId = decoded.id;
+      username = decoded.username;
+    }
+  });
   if (body.candidates.length === 0) {
     for (const image of req.files) {
       fs.unlink(
@@ -338,11 +344,13 @@ async function update(req, res, next) {
   const body = req.body;
   const token = req.cookies.token;
   let username = "";
-  if (jwt.verify(token, process.env.JWT_SECRET)) {
-    username = jwt.decode(token).username;
-  } else {
-    return next(createError(401, "Invalid Token"));
-  }
+  jwt.verify(token, process.env.JWT_SECRET, {}, function (err, decoded) {
+    if (err) {
+      return next(createError(401, "Invalid Token"));
+    } else {
+      username = decoded.username;
+    }
+  });
   if (!uuidValidator(id, 1)) {
     return next(createError(400, `id ${id} cannot be validated`));
   }
@@ -579,11 +587,13 @@ async function remove(req, res, next) {
   const id = req.params.id;
   const token = req.cookies.token;
   let username = "";
-  if (jwt.verify(token, process.env.JWT_SECRET)) {
-    username = jwt.decode(token).username;
-  } else {
-    return next(createError(401, "Invalid Token"));
-  }
+  jwt.verify(token, process.env.JWT_SECRET, {}, function (err, decoded) {
+    if (err) {
+      return next(createError(401, "Invalid Token"));
+    } else {
+      username = decoded.username;
+    }
+  });
   const transaction = await sequelize.transaction();
   if (!uuidValidator(id, 1)) {
     return next(createError(400, `id ${id} cannot be validated`));
@@ -671,11 +681,13 @@ async function regenerateKeys(req, res, next) {
   const body = req.body;
   const token = req.cookies.token;
   let username = "";
-  if (jwt.verify(token, process.env.JWT_SECRET)) {
-    username = jwt.decode(token).username;
-  } else {
-    return next(createError(401, "Invalid Token"));
-  }
+  jwt.verify(token, process.env.JWT_SECRET, {}, function (err, decoded) {
+    if (err) {
+      return next(createError(401, "Invalid Token"));
+    } else {
+      username = decoded.username;
+    }
+  });
   try {
     const election = await sequelize.query(
       "SELECT * from e_vote_election WHERE id = :id",
@@ -729,11 +741,13 @@ async function createSignature(req, res, next) {
   const body = req.body;
   const token = req.cookies.token;
   let userId = "";
-  if (jwt.verify(token, process.env.JWT_SECRET)) {
-    userId = jwt.decode(token).id;
-  } else {
-    return next(createError(401, "Invalid Token"));
-  }
+  jwt.verify(token, process.env.JWT_SECRET, {}, function (err, decoded) {
+    if (err) {
+      return next(createError(401, "Invalid Token"));
+    } else {
+      userId = decoded.id;
+    }
+  });
   try {
     const signaturePrivateKey = await kms.getSignaturePrivateKey(userId);
     const signature = encryption.sign(

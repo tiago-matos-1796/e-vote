@@ -1,5 +1,6 @@
 const cassandra = require("cassandra-driver");
-const env = process.env;
+const env = require("dotenv").config().parsed;
+
 const options = {
   contactPoints: ["127.0.0.1"],
   protocolOptions: {
@@ -7,8 +8,8 @@ const options = {
   },
   localDataCenter: "datacenter1",
   credentials: {
-    username: process.env.CASSANDRA_USER,
-    password: process.env.CASSANDRA_PASS,
+    username: env.CASSANDRA_USER,
+    password: env.CASSANDRA_PASS,
   },
   keyspace: "e_vote",
 };

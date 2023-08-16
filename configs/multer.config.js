@@ -1,17 +1,5 @@
 const multer = require("multer");
 
-/*const avatarStorage = sharpMulter({
-  destination: function (req, file, cb) {
-    cb(null, "files/images/avatars");
-  },
-  imageOptions: {
-    fileFormat: "jpg",
-    quality: 100,
-    resize: { width: 180, height: 180 },
-    useTimestamp: true,
-  },
-});*/
-
 const avatarStorage = multer.diskStorage({
   destination: function (req, file, cb) {
     cb(null, "files/images/avatars");
@@ -20,18 +8,6 @@ const avatarStorage = multer.diskStorage({
     cb(null, file.originalname);
   },
 });
-
-/*const candidateStorage = sharpMulter({
-  destination: function (req, file, cb) {
-    cb(null, "files/images/candidate_images");
-  },
-  imageOptions: {
-    fileFormat: "jpg",
-    quality: 100,
-    resize: { width: 300, height: 300 },
-    useTimestamp: true,
-  },
-});*/
 
 const candidateStorage = multer.diskStorage({
   destination: function (req, file, cb) {
