@@ -15,12 +15,13 @@ async function kmsConnection() {
   }
 }
 
-async function insertSignature(id, publicKey, privateKey, iv) {
+async function insertSignature(id, publicKey, privateKey, iv, tag) {
   const keyObj = {
     _id: id,
     public_key: publicKey,
     private_key: privateKey,
     iv: iv,
+    tag: tag,
   };
   const uri = `${process.env.KMS_URI}keys/user`;
   try {
@@ -46,12 +47,13 @@ async function insertSignature(id, publicKey, privateKey, iv) {
   }
 }
 
-async function insertElectionKeys(id, publicKey, privateKey, iv) {
+async function insertElectionKeys(id, publicKey, privateKey, iv, tag) {
   const keyObj = {
     _id: id,
     public_key: publicKey,
     private_key: privateKey,
     iv: iv,
+    tag: tag,
   };
   const uri = `${process.env.KMS_URI}keys/election`;
   try {
@@ -137,12 +139,13 @@ async function getSignaturePublicKey(id) {
   }
 }
 
-async function updateElectionKeys(id, publicKey, privateKey, iv) {
+async function updateElectionKeys(id, publicKey, privateKey, iv, tag) {
   const uri = `${process.env.KMS_URI}keys/election/${id}`;
   const keyObj = {
     public_key: publicKey,
     private_key: privateKey,
     iv: iv,
+    tag: tag,
   };
   try {
     return await axios
@@ -167,12 +170,13 @@ async function updateElectionKeys(id, publicKey, privateKey, iv) {
   }
 }
 
-async function updateSignatureKeys(id, publicKey, privateKey, iv) {
+async function updateSignatureKeys(id, publicKey, privateKey, iv, tag) {
   const uri = `${process.env.KMS_URI}keys/user/${id}`;
   const keyObj = {
     public_key: publicKey,
     private_key: privateKey,
     iv: iv,
+    tag: tag,
   };
   try {
     return await axios

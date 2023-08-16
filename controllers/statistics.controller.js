@@ -227,7 +227,8 @@ async function countVotes(req, res, next) {
         vote.vote,
         decryptionKey.key,
         body.key,
-        decryptionKey.iv
+        decryptionKey.iv,
+        decryptionKey.tag
       );
       if (
         candidates.find((x) => x.id === decryptedVote) ||
@@ -312,7 +313,7 @@ async function showResults(req, res, next) {
       return next(createError(400, `Election ${id} has no candidates`));
     }
     const decryptedResults = JSON.parse(
-      encryption.internalDecrypt(Buffer.from(results[0].results, "base64"))
+      encryption.internalDecrypt(results[0].results)
     );
     const candidateVotes = [];
     for (const candidate of candidates) {
@@ -382,7 +383,7 @@ async function showResultsUser(req, res, next) {
       return next(createError(400, `Election ${id} has no candidates`));
     }
     const decryptedResults = JSON.parse(
-      encryption.internalDecrypt(Buffer.from(results[0].results, "base64"))
+      encryption.internalDecrypt(results[0].results)
     );
     const candidateVotes = [];
     for (const candidate of candidates) {

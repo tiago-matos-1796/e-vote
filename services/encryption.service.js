@@ -1,7 +1,7 @@
 const crypto = require("crypto");
 const { Buffer } = require("buffer");
-const algorithm = "aes-128-cbc";
-const internal_algorithm = "aes-256-cbc";
+const algorithm = "aes-128-gcm";
+const internal_algorithm = "aes-256-gcm";
 const signature_hash = "SHA256";
 
 function generateKeys(key) {
@@ -20,10 +20,12 @@ function generateKeys(key) {
   const cipher = crypto.createCipheriv(algorithm, key, iv);
   let encryptedData = cipher.update(privateKey.toString(), "utf8", "base64");
   encryptedData += cipher.final("base64");
+  const tag = cipher.getAuthTag();
   return {
     publicKey: Buffer.from(publicKey).toString("base64"),
     privateKey: encryptedData,
     iv: Buffer.from(iv).toString("base64"),
+    tag: tag.toString("base64"),
   };
 }
 
@@ -36,12 +38,13 @@ function encrypt(data, publicKey) {
     .toString("base64");
 }
 
-function decrypt(encryptedData, privateKey, key, iv) {
+function decrypt(encryptedData, privateKey, key, iv, tag) {
   const decipher = crypto.createDecipheriv(
     algorithm,
     key,
     Buffer.from(iv, "base64")
   );
+  decipher.setAuthTag(Buffer.from(tag, "base64"));
   let decryptedData = decipher.update(privateKey, "base64", "utf8");
   decryptedData += decipher.final("utf8");
   return crypto
@@ -65,19 +68,22 @@ function generateSignatureKeys(key) {
   const cipher = crypto.createCipheriv(algorithm, key, iv);
   let encryptedData = cipher.update(privateKey.toString(), "utf8", "base64");
   encryptedData += cipher.final("base64");
+  const tag = cipher.getAuthTag();
   return {
     publicKey: Buffer.from(publicKey).toString("base64"),
     privateKey: encryptedData,
     iv: Buffer.from(iv).toString("base64"),
+    tag: tag.toString("base64"),
   };
 }
 
-function sign(data, privateKey, key, iv) {
+function sign(data, privateKey, key, iv, tag) {
   const decipher = crypto.createDecipheriv(
     algorithm,
     key,
     Buffer.from(iv, "base64")
   );
+  decipher.setAuthTag(Buffer.from(tag, "base64"));
   let decryptedKey = decipher.update(privateKey, "base64", "utf8");
   decryptedKey += decipher.final("utf8");
   const sign = crypto.sign(signature_hash, Buffer.from(data), decryptedKey);
@@ -101,7 +107,8 @@ function internalEncrypt(data) {
   );
   let encryptedData = cipher.update(data, "utf8", "base64");
   encryptedData += cipher.final("base64");
-  return encryptedData;
+  const tag = cipher.getAuthTag();
+  return encryptedData + "$$" + tag.toString("base64");
 }
 
 function internalDecrypt(data) {
@@ -110,7 +117,9 @@ function internalDecrypt(data) {
     process.env.INTERNAL_AES_KEY,
     Buffer.from(process.env.INTERNAL_AES_IV, "base64")
   );
-  let decryptedData = decipher.update(data, "base64", "utf8");
+  const dataSplit = data.split("$$");
+  decipher.setAuthTag(Buffer.from(dataSplit[1], "base64"));
+  let decryptedData = decipher.update(dataSplit[0], "base64", "utf8");
   decryptedData += decipher.final("utf8");
   return decryptedData;
 }
@@ -123,7 +132,8 @@ function KMSEncrypt(data) {
   );
   let encryptedData = cipher.update(data, "utf8", "base64");
   encryptedData += cipher.final("base64");
-  return encryptedData;
+  const tag = cipher.getAuthTag();
+  return encryptedData + "$$" + tag.toString("base64");
 }
 
 function KMSDecrypt(data) {
@@ -132,7 +142,9 @@ function KMSDecrypt(data) {
     process.env.KMS_AES_KEY,
     Buffer.from(process.env.KMS_AES_IV, "base64")
   );
-  let decryptedData = decipher.update(data, "base64", "utf8");
+  const dataSplit = data.split("$$");
+  decipher.setAuthTag(Buffer.from(dataSplit[1], "base64"));
+  let decryptedData = decipher.update(dataSplit[0], "base64", "utf8");
   decryptedData += decipher.final("utf8");
   return decryptedData;
 }

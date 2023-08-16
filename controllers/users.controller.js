@@ -17,7 +17,6 @@ const sharp = require("sharp");
 const moment = require("moment/moment");
 const { transporter } = require("../configs/smtp.config");
 const logger = require("../utils/log.utils");
-const xss = require("xss");
 const sanitizeImage = require("sanitize-filename");
 
 async function register(req, res, next) {
@@ -127,7 +126,8 @@ async function register(req, res, next) {
       id,
       keys.publicKey,
       keys.privateKey,
-      keys.iv
+      keys.iv,
+      keys.tag
     );
     if (key.status !== 201) {
       if (key.status === 400) {
@@ -238,7 +238,7 @@ async function verify(req, res, next) {
 async function login(req, res, next) {
   const body = req.body;
   try {
-    if (!emailValidator.validate(xss.filterXSS(body.email))) {
+    if (!emailValidator.validate(body.email)) {
       return next(
         createError(400, `Email ${body.email} is not in correct format`)
       );
@@ -247,7 +247,7 @@ async function login(req, res, next) {
       "SELECT * from e_vote_user WHERE email = :email AND blocked = false",
       {
         type: QueryTypes.SELECT,
-        replacements: { email: xss.filterXSS(body.email) },
+        replacements: { email: body.email },
       }
     );
 
@@ -259,10 +259,7 @@ async function login(req, res, next) {
         )
       );
     } else {
-      const compare = await bcrypt.compare(
-        xss.filterXSS(body.password),
-        user[0].password
-      );
+      const compare = await bcrypt.compare(body.password, user[0].password);
       if (!compare) {
         return next(createError(400, `Email and/or password is wrong`));
       }
@@ -690,6 +687,7 @@ async function showUsers(req, res, next) {
 // DONE
 async function changePermissions(req, res, next) {
   const id = req.params.id; // id of user in which permissions will be changed
+  const token = req.cookies.token;
   const permission = req.body.permission;
   let userId = "";
   jwt.verify(token, process.env.JWT_SECRET, {}, function (err, decoded) {
@@ -767,7 +765,8 @@ async function regenerateKeys(req, res, next) {
       userId,
       keyPair.publicKey,
       keyPair.privateKey,
-      keyPair.iv
+      keyPair.iv,
+      keyPair.tag
     );
     return res.status(200).json(1);
   } catch (err) {
@@ -1041,7 +1040,8 @@ async function partialRegister(req, res, next) {
       user[0].id,
       keys.publicKey,
       keys.privateKey,
-      keys.iv
+      keys.iv,
+      keys.tag
     );
     if (key.status !== 201) {
       if (key.status === 400) {

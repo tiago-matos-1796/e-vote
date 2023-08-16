@@ -102,14 +102,7 @@ async function showBallot(req, res, next) {
     );
     const electionPublicKey = await kms.getElectionPublicKey(id);
     const candidates = election.map(function (item) {
-      let image = item.image;
-      if (image) {
-        const file = fs.readFileSync(
-          `files/images/candidate_images/${sanitizeImage(image)}`
-        );
-        image = Buffer.from(file).toString("base64");
-      }
-      return { id: item.id, name: item.name, image: image };
+      return { id: item.id, name: item.name, image: item.image };
     });
     const electionObj = {
       id: election[0].election_id,
@@ -260,7 +253,8 @@ async function create(req, res, next) {
       electionId,
       keyPair.publicKey,
       keyPair.privateKey,
-      keyPair.iv
+      keyPair.iv,
+      keyPair.tag
     );
     await sequelize.query("CALL insert_manager (:user_id, :election_id);", {
       replacements: { user_id: userId, election_id: electionId },
@@ -361,7 +355,7 @@ async function update(req, res, next) {
       return next(createError(400, `Election must have at least 1 candidate`));
     }
   }
-  if (Array.isArray(body.candidates)) {
+  if (Array.isArray(body.managers)) {
     if (body.managers.length === 0) {
       return next(createError(400, `Election must have at least 1 manager`));
     }
@@ -718,7 +712,8 @@ async function regenerateKeys(req, res, next) {
       id,
       keyPair.publicKey,
       keyPair.privateKey,
-      keyPair.iv
+      keyPair.iv,
+      keyPair.tag
     );
     const log =
       "INSERT INTO election_log (id, log_creation, election_id, election_title, log, severity) VALUES (:id, :log_creation, :election_id, :election_title, :log, :severity)";
@@ -760,7 +755,8 @@ async function createSignature(req, res, next) {
       Buffer.from(body.data),
       signaturePrivateKey.key,
       body.key,
-      signaturePrivateKey.iv
+      signaturePrivateKey.iv,
+      signaturePrivateKey.tag
     );
     return res.status(200).json({ data: signature });
   } catch (err) {
