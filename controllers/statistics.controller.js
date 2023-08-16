@@ -12,12 +12,18 @@ const moment = require("moment");
 const _ = require("lodash");
 const { createReports } = require("../utils/svm.utils");
 const logger = require("../utils/log.utils");
+const sanitize = require("sanitize-filename");
 
 async function vote(req, res, next) {
   const id = req.params.id;
   const body = req.body;
   const token = req.cookies.token;
-  const decodedToken = jwt.decode(token);
+  let decodedToken = "";
+  if (jwt.verify(token, process.env.JWT_SECRET)) {
+    decodedToken = jwt.decode(token);
+  } else {
+    return next(createError(401, "Invalid Token"));
+  }
   if (!uuidValidator(id, 1)) {
     return next(createError(400, `id ${id} cannot be validated`));
   }
@@ -162,7 +168,12 @@ async function countVotes(req, res, next) {
   const id = req.params.id;
   const body = req.body;
   const token = req.cookies.token;
-  const username = jwt.decode(token).username;
+  let username = "";
+  if (jwt.verify(token, process.env.JWT_SECRET)) {
+    username = jwt.decode(token).username;
+  } else {
+    return next(createError(401, "Invalid Token"));
+  }
   if (!uuidValidator(id, 1)) {
     return next(createError(400, `id ${id} cannot be validated`));
   }
@@ -253,7 +264,7 @@ async function countVotes(req, res, next) {
     await sequelize.query("CALL insert_election_results(:id, :results);", {
       replacements: { id: id, results: results },
     });
-    await createReports(id, voteCount);
+    await createReports(sanitize(id), voteCount);
     return res.status(200).send("Counted with success");
   } catch (err) {
     await logger.insertSystemLog(

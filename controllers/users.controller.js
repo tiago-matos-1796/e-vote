@@ -412,20 +412,26 @@ async function update(req, res, next) {
           }
         );
         if (user[0].image) {
-          fs.unlink(`files/images/avatars/${user[0].image}`, function (err) {
-            if (err) {
-              throw err;
+          fs.unlink(
+            `files/images/avatars/${sanitizeImage(user[0].image)}`,
+            function (err) {
+              if (err) {
+                throw err;
+              }
             }
-          });
+          );
         }
         imageName = fileName;
       } else {
         if (user[0].image) {
-          fs.unlink(`files/images/avatars/${user[0].image}`, function (err) {
-            if (err) {
-              throw err;
+          fs.unlink(
+            `files/images/avatars/${sanitizeImage(user[0].image)}`,
+            function (err) {
+              if (err) {
+                throw err;
+              }
             }
-          });
+          );
         }
         imageName = null;
       }
@@ -478,11 +484,14 @@ async function remove(req, res, next) {
       return next(createError(404, `User ${id} not found`));
     }
     if (user[0].image) {
-      fs.unlink(`files/images/avatars/${user[0].image}`, function (err) {
-        if (err) {
-          throw err;
+      fs.unlink(
+        `files/images/avatars/${sanitizeImage(user[0].image)}`,
+        function (err) {
+          if (err) {
+            throw err;
+          }
         }
-      });
+      );
     }
     await sequelize.query("CALL delete_user (:id);", {
       replacements: { id: id },
@@ -503,7 +512,12 @@ async function remove(req, res, next) {
 async function adminUserDelete(req, res, next) {
   const id = req.params.id;
   const token = req.cookies.token;
-  const userId = jwt.decode(token).id;
+  let userId = "";
+  if (jwt.verify(token, process.env.JWT_SECRET)) {
+    userId = jwt.decode(token).id;
+  } else {
+    return next(createError(401, "Invalid Token"));
+  }
   try {
     if (!uuidValidator(id, 1)) {
       return next(createError(400, `id ${id} cannot be validated`));
@@ -564,7 +578,12 @@ async function adminUserDelete(req, res, next) {
 
 async function show(req, res, next) {
   const token = req.cookies.token;
-  const userId = jwt.decode(token).id;
+  let userId = "";
+  if (jwt.verify(token, process.env.JWT_SECRET)) {
+    userId = jwt.decode(token).id;
+  } else {
+    return next(createError(401, "Invalid Token"));
+  }
   try {
     const profile = await sequelize.query(
       "select username, email, display_name, image from e_vote_user where id = :id;",
@@ -591,7 +610,12 @@ async function show(req, res, next) {
 async function showUsers(req, res, next) {
   try {
     const token = req.cookies.token;
-    const id = jwt.decode(token).id;
+    let id = "";
+    if (jwt.verify(token, process.env.JWT_SECRET)) {
+      id = jwt.decode(token).id;
+    } else {
+      return next(createError(401, "Invalid Token"));
+    }
     const user = await sequelize.query(
       "SELECT * FROM e_vote_user WHERE id = :id",
       {
@@ -692,7 +716,12 @@ async function changePermissions(req, res, next) {
 
 async function regenerateKeys(req, res, next) {
   const token = req.cookies.token;
-  const userId = jwt.decode(token).id;
+  let userId = "";
+  if (jwt.verify(token, process.env.JWT_SECRET)) {
+    userId = jwt.decode(token).id;
+  } else {
+    return next(createError(401, "Invalid Token"));
+  }
   const body = req.body;
   try {
     const keyPair = encryption.generateSignatureKeys(body.key);
@@ -712,12 +741,18 @@ async function regenerateKeys(req, res, next) {
 async function blockUser(req, res, next) {
   const id = req.params.id;
   const token = req.cookies.token;
+  let userId = "";
+  if (jwt.verify(token, process.env.JWT_SECRET)) {
+    userId = jwt.decode(token).id;
+  } else {
+    return next(createError(401, "Invalid Token"));
+  }
   try {
     const admin = await sequelize.query(
       "SELECT id, username, permission FROM e_vote_user WHERE id = :id",
       {
         type: QueryTypes.SELECT,
-        replacements: { id: jwt.decode(token).id },
+        replacements: { id: userId },
       }
     );
     const user = await sequelize.query(
@@ -772,6 +807,12 @@ async function blockUser(req, res, next) {
 async function unblockUser(req, res, next) {
   const id = req.params.id;
   const token = req.cookies.token;
+  let userId = "";
+  if (jwt.verify(token, process.env.JWT_SECRET)) {
+    userId = jwt.decode(token).id;
+  } else {
+    return next(createError(401, "Invalid Token"));
+  }
   try {
     const user = await sequelize.query(
       "SELECT * from e_vote_user WHERE id = :id",
@@ -784,7 +825,7 @@ async function unblockUser(req, res, next) {
       "SELECT id, username, permission FROM e_vote_user WHERE id = :id",
       {
         type: QueryTypes.SELECT,
-        replacements: { id: jwt.decode(token).id },
+        replacements: { id: userId },
       }
     );
     if (user[0].length === 0) {

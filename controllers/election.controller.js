@@ -15,7 +15,12 @@ const sanitizeImage = require("sanitize-filename");
 
 async function listByVoter(req, res, next) {
   const token = req.cookies.token;
-  const userId = jwt.decode(token).id;
+  let userId = "";
+  if (jwt.verify(token, process.env.JWT_SECRET)) {
+    userId = jwt.decode(token).id;
+  } else {
+    return next(createError(401, "Invalid Token"));
+  }
   try {
     const elections = await sequelize.query(
       "select eve.id, eve.title, eve.start_date, eve.end_date, eve.created_at, eve.results, evv.voted from e_vote_election eve inner join e_vote_voter evv on eve.id = evv.election_id where evv.user_id = :id",
@@ -45,7 +50,12 @@ async function listByVoter(req, res, next) {
 
 async function listByManager(req, res, next) {
   const token = req.cookies.token;
-  const userId = jwt.decode(token).id;
+  let userId = "";
+  if (jwt.verify(token, process.env.JWT_SECRET)) {
+    userId = jwt.decode(token).id;
+  } else {
+    return next(createError(401, "Invalid Token"));
+  }
   try {
     const elections = await sequelize.query(
       "select eve.id, eve.title, eve.start_date, eve.end_date, eve.created_at, eve.results from e_vote_election eve inner join e_vote_manager evm on eve.id = evm.election_id where evm.user_id = :id;",
@@ -75,7 +85,6 @@ async function listByManager(req, res, next) {
 
 async function showBallot(req, res, next) {
   const id = req.params.id;
-  const token = req.cookies.token;
   if (!uuidValidator(id, 1)) {
     return next(createError(400, `id ${id} cannot be validated`));
   }
@@ -91,7 +100,9 @@ async function showBallot(req, res, next) {
     const candidates = election.map(function (item) {
       let image = item.image;
       if (image) {
-        const file = fs.readFileSync(`files/images/candidate_images/${image}`);
+        const file = fs.readFileSync(
+          `files/images/candidate_images/${sanitizeImage(image)}`
+        );
         image = Buffer.from(file).toString("base64");
       }
       return { id: item.id, name: item.name, image: image };
@@ -195,8 +206,14 @@ async function managerShow(req, res, next) {
 async function create(req, res, next) {
   const body = req.body;
   const token = req.cookies.token;
-  const userId = jwt.decode(token).id;
-  const username = jwt.decode(token).username;
+  let userId = "";
+  let username = "";
+  if (jwt.verify(token, process.env.JWT_SECRET)) {
+    userId = jwt.decode(token).id;
+    username = jwt.decode(token).username;
+  } else {
+    return next(createError(401, "Invalid Token"));
+  }
   if (body.candidates.length === 0) {
     for (const image of req.files) {
       fs.unlink(
@@ -320,7 +337,12 @@ async function update(req, res, next) {
   const id = req.params.id;
   const body = req.body;
   const token = req.cookies.token;
-  const username = jwt.decode(token).username;
+  let username = "";
+  if (jwt.verify(token, process.env.JWT_SECRET)) {
+    username = jwt.decode(token).username;
+  } else {
+    return next(createError(401, "Invalid Token"));
+  }
   if (!uuidValidator(id, 1)) {
     return next(createError(400, `id ${id} cannot be validated`));
   }
@@ -420,7 +442,9 @@ async function update(req, res, next) {
             );
             if (candidates[index].image) {
               fs.unlink(
-                `files/images/candidate_images/${candidates[index].image}`,
+                `files/images/candidate_images/${sanitizeImage(
+                  candidates[index].image
+                )}`,
                 function (err) {
                   if (err) {
                     throw err;
@@ -433,7 +457,9 @@ async function update(req, res, next) {
         } else {
           if (candidates[index].image) {
             fs.unlink(
-              `files/images/candidate_images/${candidates[index].image}`,
+              `files/images/candidate_images/${sanitizeImage(
+                candidates[index].image
+              )}`,
               function (err) {
                 if (err) {
                   throw err;
@@ -552,7 +578,12 @@ async function update(req, res, next) {
 async function remove(req, res, next) {
   const id = req.params.id;
   const token = req.cookies.token;
-  const username = jwt.decode(token).username;
+  let username = "";
+  if (jwt.verify(token, process.env.JWT_SECRET)) {
+    username = jwt.decode(token).username;
+  } else {
+    return next(createError(401, "Invalid Token"));
+  }
   const transaction = await sequelize.transaction();
   if (!uuidValidator(id, 1)) {
     return next(createError(400, `id ${id} cannot be validated`));
@@ -639,7 +670,12 @@ async function regenerateKeys(req, res, next) {
   const id = req.params.id;
   const body = req.body;
   const token = req.cookies.token;
-  const username = jwt.decode(token).username;
+  let username = "";
+  if (jwt.verify(token, process.env.JWT_SECRET)) {
+    username = jwt.decode(token).username;
+  } else {
+    return next(createError(401, "Invalid Token"));
+  }
   try {
     const election = await sequelize.query(
       "SELECT * from e_vote_election WHERE id = :id",
@@ -692,7 +728,12 @@ async function regenerateKeys(req, res, next) {
 async function createSignature(req, res, next) {
   const body = req.body;
   const token = req.cookies.token;
-  const userId = jwt.decode(token).id;
+  let userId = "";
+  if (jwt.verify(token, process.env.JWT_SECRET)) {
+    userId = jwt.decode(token).id;
+  } else {
+    return next(createError(401, "Invalid Token"));
+  }
   try {
     const signaturePrivateKey = await kms.getSignaturePrivateKey(userId);
     const signature = encryption.sign(
