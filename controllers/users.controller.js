@@ -908,7 +908,7 @@ async function bulkRegister(req, res, next) {
       type: QueryTypes.SELECT,
     });
     const newUser = [];
-    if (Array.isArray(dbUsers)) {
+    if (Array.isArray(dbUsers) && Array.isArray(body)) {
       for (let i = 0; i < body.length; i++) {
         let user = "";
         if (typeof body[i] === "string") {
@@ -963,7 +963,9 @@ async function bulkRegister(req, res, next) {
           await transaction.rollback();
           return res
             .status(400)
-            .send(`Error: Permission ${permission} not accepted`);
+            .send(
+              `Error: Permission ${sanitizeImage(permission)} not accepted`
+            );
         }
         token = jwt.sign(
           { id: id, username: username },
