@@ -576,15 +576,9 @@ async function adminUserDelete(req, res, next) {
     await sequelize.query("CALL delete_user (:id);", {
       replacements: { id: id },
     });
-    const log =
-      "INSERT INTO internal_log (id, log_creation, log, type) VALUES (:id, :log_creation, :log, :type)";
-    const logParams = {
-      id: uuid.v1(),
-      log_creation: moment().format("DD-MM-YYYY HH:mm"),
-      log: `${admin[0].username} deleted user ${user[0].username}`,
-      type: "USER",
-    };
-    await client.execute(log, logParams, { prepare: true });
+    await logger.insertInternalLog(
+      `${admin[0].username} deleted user ${user[0].username}`
+    );
     await kms.deleteSignatureKeys(userId);
     return res.status(200).json(1);
   } catch (err) {
@@ -727,15 +721,9 @@ async function changePermissions(req, res, next) {
     await sequelize.query("CALL change_user_permission(:id, :permission);", {
       replacements: { id: id, permission: permission },
     });
-    const log =
-      "INSERT INTO internal_log (id, log_creation, log, type) VALUES (:id, :log_creation, :log, :type)";
-    const logParams = {
-      id: uuid.v1(),
-      log_creation: moment().format("DD-MM-YYYY HH:mm"),
-      log: `${admin[0].username} changed permission of ${user[0].username} from ${oldPermission} to ${permission}`,
-      type: "USER",
-    };
-    await client.execute(log, logParams, { prepare: true });
+    await logger.insertInternalLog(
+      `${admin[0].username} changed permission of ${user[0].username} from ${oldPermission} to ${permission}`
+    );
     return res.status(200).json({ id: id, permission: permission });
   } catch (err) {
     await logger.insertSystemLog(
@@ -822,15 +810,9 @@ async function blockUser(req, res, next) {
     await sequelize.query("CALL block_user (:id);", {
       replacements: { id: id },
     });
-    const log =
-      "INSERT INTO internal_log (id, log_creation, log, type) VALUES (:id, :log_creation, :log, :type)";
-    const logParams = {
-      id: uuid.v1(),
-      log_creation: moment().format("DD-MM-YYYY HH:mm"),
-      log: `${admin[0].username} blocked ${user[0].username}`,
-      type: "USER",
-    };
-    await client.execute(log, logParams, { prepare: true });
+    await logger.insertInternalLog(
+      `${admin[0].username} blocked ${user[0].username}`
+    );
     return res.status(200).json(1);
   } catch (err) {
     await logger.insertSystemLog(
@@ -875,15 +857,9 @@ async function unblockUser(req, res, next) {
     await sequelize.query("CALL unblock_user (:id);", {
       replacements: { id: id },
     });
-    const log =
-      "INSERT INTO internal_log (id, log_creation, log, type) VALUES (:id, :log_creation, :log, :type)";
-    const logParams = {
-      id: uuid.v1(),
-      log_creation: moment().format("DD-MM-YYYY HH:mm"),
-      log: `${admin[0].username} unblocked ${user[0].username}`,
-      type: "USER",
-    };
-    await client.execute(log, logParams, { prepare: true });
+    await logger.insertInternalLog(
+      `${admin[0].username} unblocked ${user[0].username}`
+    );
     return res.status(200).json(1);
   } catch (err) {
     await logger.insertSystemLog(
@@ -928,7 +904,27 @@ async function bulkRegister(req, res, next) {
   const transaction = await sequelize.transaction();
   try {
     const generatedUser = [];
-    for (const user of body) {
+    const dbUsers = await sequelize.query("SELECT email from e_vote_user;", {
+      type: QueryTypes.SELECT,
+    });
+    const newUser = [];
+    if (Array.isArray(dbUsers)) {
+      for (let i = 0; i < body.length; i++) {
+        let user = "";
+        if (typeof body[i] === "string") {
+          user = dbUsers.find((x) => x.email === body[i]);
+        }
+        if (typeof body[i] === "object") {
+          user = dbUsers.find((x) => x.email === body[i].email);
+        }
+        if (!user) {
+          newUser.push(body[i]);
+        }
+      }
+    } else {
+      return res.status(500).send("An error has occurred");
+    }
+    for (const user of newUser) {
       const id = uuid.v1();
       let username = "";
       let permission = "";
@@ -963,6 +959,12 @@ async function bulkRegister(req, res, next) {
       if (typeof user === "object") {
         username = user.email.split("@")[0] + Date.now().toString();
         permission = user.permission;
+        if (!permissions.includes(permission)) {
+          await transaction.rollback();
+          return res
+            .status(400)
+            .send(`Error: Permission ${permission} not accepted`);
+        }
         token = jwt.sign(
           { id: id, username: username },
           process.env.JWT_SECRET

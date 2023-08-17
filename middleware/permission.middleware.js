@@ -1,8 +1,6 @@
 const jwt = require("jsonwebtoken");
-const db = require("../models");
 const { sequelize } = require("../models/index");
 const { QueryTypes } = require("sequelize");
-const createError = require("http-errors");
 const access = (permissions) => {
   return async (req, res, next) => {
     const token = req.cookies.token;

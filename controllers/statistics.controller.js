@@ -10,7 +10,7 @@ const createError = require("http-errors");
 const uuidValidator = require("uuid-validate");
 const moment = require("moment");
 const _ = require("lodash");
-const { createReports } = require("../utils/svm.utils");
+const { createReports, submitVote } = require("../utils/svm.utils");
 const logger = require("../utils/log.utils");
 const sanitize = require("sanitize-filename");
 
@@ -54,74 +54,50 @@ async function vote(req, res, next) {
       }
     );
     if (voter.length === 0) {
-      const log =
-        "INSERT INTO election_log (id, log_creation, election_id, log, severity) VALUES (:id, :log_creation, :election_id, :log, :severity)";
-      const logParams = {
-        id: uuid.v1(),
-        log_creation: moment().format("DD-MM-YYYY HH:mm"),
-        election_id: id,
-        log: `${decodedToken.username} is not a voter in this election`,
-        severity: "MEDIUM",
-      };
-      await client.execute(log, logParams, { prepare: true });
+      await logger.insertElectionLog(
+        id,
+        election[0].title,
+        `${decodedToken.username} is not a voter in this election`,
+        "MEDIUM"
+      );
       return next(createError(403, `Not voter in this election`));
     }
     if (voter[0].voted !== null) {
-      const log =
-        "INSERT INTO election_log (id, log_creation, election_id, log, severity) VALUES (:id, :log_creation, :election_id, :log, :severity)";
-      const logParams = {
-        id: uuid.v1(),
-        log_creation: moment().format("DD-MM-YYYY HH:mm"),
-        election_id: id,
-        log: `${decodedToken.username} had already voted, vote discarded`,
-        severity: "LOW",
-      };
-      await client.execute(log, logParams, { prepare: true });
+      await logger.insertElectionLog(
+        id,
+        election[0].title,
+        `${decodedToken.username} had already voted, vote discarded`,
+        "LOW"
+      );
       return next(createError(400, `Already voted`));
     }
     if (body.hash !== hash.update(body.vote, "utf8").digest("base64")) {
-      const log =
-        "INSERT INTO election_log (id, log_creation, election_id, log, severity) VALUES (:id, :log_creation, :election_id, :log, :severity)";
-      const logParams = {
-        id: uuid.v1(),
-        log_creation: moment().format("DD-MM-YYYY HH:mm"),
-        election_id: id,
-        log: `${decodedToken.username} submitted a tampered vote`,
-        severity: "HIGH",
-      };
-      await client.execute(log, logParams, { prepare: true });
+      await logger.insertElectionLog(
+        id,
+        election[0].title,
+        `${decodedToken.username} submitted a tampered vote`,
+        "HIGH"
+      );
       return next(createError(400, `Vote content could not be validated`));
     }
     const signaturePublicKey = await kms.getSignaturePublicKey(decodedToken.id);
     console.log(body.signature);
     if (!encryption.verify(body.vote, signaturePublicKey.key, body.signature)) {
-      const log =
-        "INSERT INTO election_log (id, log_creation, election_id, log, severity) VALUES (:id, :log_creation, :election_id, :log, :severity)";
-      const logParams = {
-        id: uuid.v1(),
-        log_creation: moment().format("DD-MM-YYYY HH:mm"),
-        election_id: id,
-        log: `${decodedToken.username}'s signature could not be validated`,
-        severity: "HIGH",
-      };
-      await client.execute(log, logParams, { prepare: true });
+      await logger.insertElectionLog(
+        id,
+        election[0].title,
+        `${decodedToken.username}'s signature could not be validated`,
+        "HIGH"
+      );
       return next(createError(400, `Signature could not be validated`));
     }
-    const query =
-      "INSERT INTO votes (id, election_id, vote) VALUES (:id, :election_id, :vote)";
-    const params = { id: uuid.v1(), election_id: id, vote: body.vote };
-    const log =
-      "INSERT INTO election_log (id, log_creation, election_id, election_title, log, severity) VALUES (:id, :log_creation, :election_id, :election_title, :log, :severity)";
-    const logParams = {
-      id: uuid.v1(),
-      log_creation: moment().format("DD-MM-YYYY HH:mm"),
-      election_id: id,
-      election_title: election[0].title,
-      log: `${decodedToken.username} submitted vote`,
-      severity: "NONE",
-    };
-    await client.execute(log, logParams, { prepare: true });
-    await client.execute(query, params, { prepare: true });
+    await submitVote(id, body.vote);
+    await logger.insertElectionLog(
+      id,
+      election[0].title,
+      `${decodedToken.username} submitted vote`,
+      "NONE"
+    );
     await sequelize.query("CALL vote_submission (:voter, :election, :time);", {
       replacements: {
         voter: decodedToken.id,
@@ -208,16 +184,12 @@ async function countVotes(req, res, next) {
     const params = { id: id };
     const votes = await client.execute(query, params, { prepare: true });
     if (votes.rows.length !== voters.length) {
-      const log =
-        "INSERT INTO election_log (id, log_creation, election_id, log, severity) VALUES (:id, :log_creation, :election_id, :log, :severity)";
-      const logParams = {
-        id: uuid.v1(),
-        log_creation: moment().format("DD-MM-YYYY HH:mm"),
-        election_id: id,
-        log: `Recorded votes do not match the amount of votes submitted by voters`,
-        severity: "HIGH",
-      };
-      await client.execute(log, logParams, { prepare: true });
+      await logger.insertElectionLog(
+        id,
+        election[0].title,
+        `Recorded votes do not match the amount of votes submitted by voters`,
+        "HIGH"
+      );
       return next(createError(403, `Possible fraud detected`));
     }
     const decryptionKey = await kms.getElectionPrivateKey(id);
@@ -236,16 +208,12 @@ async function countVotes(req, res, next) {
       ) {
         decryptedVotes.push(decryptedVote);
       } else {
-        const log =
-          "INSERT INTO election_log (id, log_creation, election_id, log, severity) VALUES (:id, :log_creation, :election_id, :log, :severity)";
-        const logParams = {
-          id: uuid.v1(),
-          log_creation: moment().format("DD-MM-YYYY HH:mm"),
-          election_id: id,
-          log: `Vote no matching any candidate has been found`,
-          severity: "MEDIUM",
-        };
-        await client.execute(log, logParams, { prepare: true });
+        await logger.insertElectionLog(
+          id,
+          election[0].title,
+          `Vote not matching any candidate has been found`,
+          "MEDIUM"
+        );
       }
     }
     let voteCount = {};
@@ -255,17 +223,12 @@ async function countVotes(req, res, next) {
     }
     voteCount["blank"] = count["blank"] ? count["blank"] : 0;
     const results = encryption.internalEncrypt(JSON.stringify(voteCount));
-    const log =
-      "INSERT INTO election_log (id, log_creation, election_id, election_title, log, severity) VALUES (:id, :log_creation, :election_id, :election_title, :log, :severity)";
-    const logParams = {
-      id: uuid.v1(),
-      log_creation: moment().format("DD-MM-YYYY HH:mm"),
-      election_id: id,
-      election_title: election[0].title,
-      log: `${username} ordered votes be counted`,
-      severity: "NONE",
-    };
-    await client.execute(log, logParams, { prepare: true });
+    await logger.insertElectionLog(
+      id,
+      election[0].title,
+      `${username} ordered votes be counted`,
+      "NONE"
+    );
     await sequelize.query("CALL insert_election_results(:id, :results);", {
       replacements: { id: id, results: results },
     });

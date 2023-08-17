@@ -4,6 +4,15 @@ const PDFDocument = require("pdfkit-table");
 const ChartJsImage = require("chartjs-to-image");
 const fs = require("fs");
 const ExcelJS = require("exceljs");
+const uuid = require("uuid");
+const { client } = require("../configs/cassandra.config");
+
+async function submitVote(id, vote) {
+  const query =
+    "INSERT INTO votes (id, election_id, vote) VALUES (:id, :election_id, :vote)";
+  const params = { id: uuid.v1(), election_id: id, vote: vote };
+  await client.execute(query, params, { prepare: true });
+}
 
 async function createReports(id, results) {
   const candidates = await sequelize.query(
@@ -156,4 +165,4 @@ async function createReports(id, results) {
   });
 }
 
-module.exports = { createReports };
+module.exports = { createReports, submitVote };

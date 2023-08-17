@@ -316,17 +316,12 @@ async function create(req, res, next) {
       }
     }
     await transaction.commit();
-    const log =
-      "INSERT INTO election_log (id, log_creation, election_id, election_title, log, severity) VALUES (:id, :log_creation, :election_id, :election_title, :log, :severity)";
-    const logParams = {
-      id: uuid.v1(),
-      log_creation: moment().format("DD-MM-YYYY HH:mm"),
-      election_id: electionId,
-      election_title: body.title,
-      log: `Election ${body.title} with ID: ${electionId} has been created by user ${username}`,
-      severity: "NONE",
-    };
-    await client.execute(log, logParams, { prepare: true });
+    await logger.insertElectionLog(
+      electionId,
+      body.title,
+      `Election ${body.title} with ID: ${electionId} has been created by user ${username}`,
+      "NONE"
+    );
     return res.status(200).json(body);
   } catch (err) {
     await transaction.rollback();
@@ -559,17 +554,12 @@ async function update(req, res, next) {
       });
     }
     await transaction.commit();
-    const log =
-      "INSERT INTO election_log (id, log_creation, election_id, election_title, log, severity) VALUES (:id, :log_creation, :election_id, :election_title, :log, :severity)";
-    const logParams = {
-      id: uuid.v1(),
-      log_creation: moment().format("DD-MM-YYYY HH:mm"),
-      election_id: id,
-      election_title: body.title,
-      log: `Election ${body.title} with ID: ${id} has been updated by user ${username}`,
-      severity: "NONE",
-    };
-    await client.execute(log, logParams, { prepare: true });
+    await logger.insertElectionLog(
+      id,
+      body.title,
+      `Election ${body.title} with ID: ${id} has been updated by user ${username}`,
+      "NONE"
+    );
     return res.status(200).json(body);
   } catch (err) {
     await transaction.rollback();
@@ -651,17 +641,12 @@ async function remove(req, res, next) {
       transaction,
     });
     await kms.deleteElectionKeys(id);
-    const log =
-      "INSERT INTO election_log (id, log_creation, election_id, election_title, log, severity) VALUES (:id, :log_creation, :election_id, :election_title, :log, :severity)";
-    const logParams = {
-      id: uuid.v1(),
-      log_creation: moment().format("DD-MM-YYYY HH:mm"),
-      election_id: id,
-      election_title: election[0].title,
-      log: `Election with ID: ${id} has been deleted by user ${username}`,
-      severity: "NONE",
-    };
-    await client.execute(log, logParams, { prepare: true });
+    await logger.insertElectionLog(
+      id,
+      election[0].title,
+      `Election with ID: ${id} has been deleted by user ${username}`,
+      "NONE"
+    );
     await transaction.commit();
     return res.status(200).json(1);
   } catch (err) {
@@ -715,17 +700,12 @@ async function regenerateKeys(req, res, next) {
       keyPair.iv,
       keyPair.tag
     );
-    const log =
-      "INSERT INTO election_log (id, log_creation, election_id, election_title, log, severity) VALUES (:id, :log_creation, :election_id, :election_title, :log, :severity)";
-    const logParams = {
-      id: uuid.v1(),
-      log_creation: moment().format("DD-MM-YYYY HH:mm"),
-      election_id: id,
-      election_title: election[0].title,
-      log: ` Keys have been regenerated for election with ID: ${id} by user ${username}`,
-      severity: "NONE",
-    };
-    await client.execute(log, logParams, { prepare: true });
+    await logger.insertElectionLog(
+      id,
+      election[0].title,
+      `Keys have been regenerated for election with ID: ${id} by user ${username}`,
+      "NONE"
+    );
     return res.status(200).json(1);
   } catch (err) {
     await logger.insertSystemLog(
