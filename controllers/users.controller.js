@@ -964,7 +964,7 @@ async function bulkRegister(req, res, next) {
           return res
             .status(400)
             .send(
-              `Error: Permission ${sanitizeImage(permission)} not accepted`
+              `Error: Not accepted permission detected; Only REGULAR, MANAGER, AUDITOR and ADMIN are accepted`
             );
         }
         token = jwt.sign(
