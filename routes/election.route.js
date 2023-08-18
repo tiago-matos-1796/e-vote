@@ -3,6 +3,7 @@ const router = express.Router();
 const auth = require("../middleware/auth.middleware");
 const { access } = require("../middleware/permission.middleware");
 const { uploadCandidateImage } = require("../configs/multer.config");
+const electionController = require("../controllers/election.controller");
 const limit = require("express-limit").limit;
 
 module.exports = (app) => {
@@ -27,8 +28,20 @@ module.exports = (app) => {
       message: "Too many requests",
     }),
     auth,
-    access(["MANAGER"]),
+    access(["MANAGER", "AUDITOR"]),
     electionController.listByManager
+  );
+  router.get(
+    "/fraud",
+    limit({
+      max: 100,
+      period: 60 * 1000,
+      status: 429,
+      message: "Too many requests",
+    }),
+    auth,
+    access(["AUDITOR"]),
+    electionController.showFrauds
   );
   router.get(
     "/:id",
@@ -113,6 +126,18 @@ module.exports = (app) => {
     auth,
     access(["MANAGER"]),
     electionController.regenerateKeys
+  );
+  router.patch(
+    "/fraud/:id",
+    limit({
+      max: 100,
+      period: 60 * 1000,
+      status: 429,
+      message: "Too many requests",
+    }),
+    auth,
+    access(["AUDITOR"]),
+    electionController.removeFraud
   );
   app.use("/elections", router);
 };

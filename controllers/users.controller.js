@@ -11,10 +11,8 @@ const uuidValidator = require("uuid-validate");
 const bcrypt = require("bcrypt");
 const permissions = ["ADMIN", "MANAGER", "AUDITOR", "REGULAR"];
 const encryption = require("../services/encryption.service");
-const { client } = require("../configs/cassandra.config");
 const fs = require("fs");
 const sharp = require("sharp");
-const moment = require("moment/moment");
 const { transporter } = require("../configs/smtp.config");
 const logger = require("../utils/log.utils");
 const sanitizeImage = require("sanitize-filename");
@@ -114,87 +112,105 @@ async function register(req, res, next) {
         return next(createError(400, `Signature key must have a length of 16`));
       }
     }
-    const keys = encryption.generateSignatureKeys(body.sign_key);
-    const username =
-      typeof body.email === "string"
-        ? body.email.split("@")[0] + Date.now().toString()
-        : "user" + Date.now().toString();
-    const password = await bcrypt.hash(body.password, 13);
-    const id = uuid.v1();
-    const token = jwt.sign({ id: id, username: username }, config.JWT_SECRET);
-    const key = await kms.insertSignature(
-      id,
-      keys.publicKey,
-      keys.privateKey,
-      keys.iv,
-      keys.tag
-    );
-    if (key.status !== 201) {
-      if (key.status === 400) {
-        if (image) {
-          fs.unlink(
-            `files/images/avatars/${sanitizeImage(image)}`,
-            function (err) {
-              if (err) {
-                throw err;
+    const kms_conn = await kms.kmsConnection();
+    if (kms_conn) {
+      const keys = encryption.generateSignatureKeys(body.sign_key);
+      const username =
+        typeof body.email === "string"
+          ? body.email.split("@")[0] + Date.now().toString()
+          : "user" + Date.now().toString();
+      const password = await bcrypt.hash(body.password, 13);
+      const id = uuid.v1();
+      const token = jwt.sign({ id: id, username: username }, config.JWT_SECRET);
+      const key = await kms.insertSignature(
+        id,
+        keys.publicKey,
+        keys.privateKey,
+        keys.iv,
+        keys.tag
+      );
+      if (key.status !== 201) {
+        if (key.status === 400) {
+          if (image) {
+            fs.unlink(
+              `files/images/avatars/${sanitizeImage(image)}`,
+              function (err) {
+                if (err) {
+                  throw err;
+                }
               }
-            }
-          );
+            );
+          }
+          return next(createError(400, `Duplicate key`));
+        } else {
+          return res.status(500).send("Error inserting user keys");
         }
-        return next(createError(400, `Duplicate key`));
-      } else {
-        return res.status(500).send("Error inserting user keys");
       }
-    }
-    if (image) {
-      const fileName = `${Date.now()}-${Math.round(
-        Math.random() * 1e9
-      )}_${image}`;
-      await sharp(`files/images/avatars/${image}`)
-        .resize(180, 180)
-        .toFormat("jpg")
-        .toFile(`files/images/avatars/${fileName}`);
-      fs.unlink(`files/images/avatars/${sanitizeImage(image)}`, function (err) {
+      if (image) {
+        const fileName = `${Date.now()}-${Math.round(
+          Math.random() * 1e9
+        )}_${image}`;
+        await sharp(`files/images/avatars/${image}`)
+          .resize(180, 180)
+          .toFormat("jpg")
+          .toFile(`files/images/avatars/${fileName}`);
+        fs.unlink(
+          `files/images/avatars/${sanitizeImage(image)}`,
+          function (err) {
+            if (err) {
+              throw err;
+            }
+          }
+        );
+        image = fileName;
+      }
+      const activation_token = crypto
+        .createHash("sha256")
+        .update(Date.now().toString())
+        .digest("base64");
+      await sequelize.query(
+        "CALL insert_user (:id, :username, :email, :display_name, :image, :password, :permission, :token, :verification);",
+        {
+          replacements: {
+            id: id,
+            username: username,
+            email: body.email,
+            display_name: body.display_name,
+            image: image,
+            password: password,
+            permission: "REGULAR",
+            token: token,
+            verification: activation_token,
+          },
+        }
+      );
+      const link = `${process.env.FRONTEND_URI}/verification?token=${activation_token}`;
+      const mailOptions = {
+        from: "UAlg Secure Vote",
+        to: body.email,
+        subject: "Register",
+        text: "Thank you for registering in UAlg secure vote",
+        html: `<b>Hey ${body.display_name}! </b><br> Thank you for registering in UAlg secure vote<br>Please use the following link to verify your account:<br><a href="${link}">${link}</a>`,
+      };
+      await transporter.sendMail(mailOptions, (err, info) => {
         if (err) {
           throw err;
         }
       });
-      image = fileName;
+      return res.status(200).json(1);
+    } else {
+      if (image) {
+        fs.unlink(
+          `files/images/avatars/${sanitizeImage(image)}`,
+          function (err) {
+            if (err) {
+              throw err;
+            }
+          }
+        );
+      }
+      return res.status(500).send("An error has occurred");
     }
-    const activation_token = crypto
-      .createHash("sha256")
-      .update(Date.now().toString())
-      .digest("base64");
-    await sequelize.query(
-      "CALL insert_user (:id, :username, :email, :display_name, :image, :password, :permission, :token, :verification);",
-      {
-        replacements: {
-          id: id,
-          username: username,
-          email: body.email,
-          display_name: body.display_name,
-          image: image,
-          password: password,
-          permission: "REGULAR",
-          token: token,
-          verification: activation_token,
-        },
-      }
-    );
-    const link = `${process.env.FRONTEND_URI}/verification?token=${activation_token}`;
-    const mailOptions = {
-      from: "UAlg Secure Vote",
-      to: body.email,
-      subject: "Register",
-      text: "Thank you for registering in UAlg secure vote",
-      html: `<b>Hey ${body.display_name}! </b><br> Thank you for registering in UAlg secure vote<br>Please use the following link to verify your account:<br><a href="${link}">${link}</a>`,
-    };
-    await transporter.sendMail(mailOptions, (err, info) => {
-      if (err) {
-        throw err;
-      }
-    });
-    return res.status(200).json(1);
   } catch (err) {
     fs.unlink(`files/images/avatars/${sanitizeImage(image)}`, function (err) {
       if (err) {
@@ -513,11 +529,16 @@ async function remove(req, res, next) {
         }
       );
     }
-    await sequelize.query("CALL delete_user (:id);", {
-      replacements: { id: id },
-    });
-    await kms.deleteSignatureKeys(userId);
-    return res.status(200).json(1);
+    const kmsConn = await kms.kmsConnection();
+    if (kmsConn) {
+      await sequelize.query("CALL delete_user (:id);", {
+        replacements: { id: id },
+      });
+      await kms.deleteSignatureKeys(userId);
+      return res.status(200).json(1);
+    } else {
+      return res.status(500).send("An error has occurred");
+    }
   } catch (err) {
     await logger.insertSystemLog(
       "/users/:id",
@@ -573,14 +594,19 @@ async function adminUserDelete(req, res, next) {
     if (user.length === 0) {
       return next(createError(404, `User ${id} not found`));
     }
-    await sequelize.query("CALL delete_user (:id);", {
-      replacements: { id: id },
-    });
-    await logger.insertInternalLog(
-      `${admin[0].username} deleted user ${user[0].username}`
-    );
-    await kms.deleteSignatureKeys(userId);
-    return res.status(200).json(1);
+    const kmsConn = await kms.kmsConnection();
+    if (kmsConn) {
+      await sequelize.query("CALL delete_user (:id);", {
+        replacements: { id: id },
+      });
+      await logger.insertInternalLog(
+        `${admin[0].username} deleted user ${user[0].username}`
+      );
+      await kms.deleteSignatureKeys(userId);
+      return res.status(200).json(1);
+    } else {
+      return res.status(500).send("An error has occurred");
+    }
   } catch (err) {
     await logger.insertSystemLog(
       "/users/admin/:id",
@@ -748,15 +774,24 @@ async function regenerateKeys(req, res, next) {
   });
   const body = req.body;
   try {
-    const keyPair = encryption.generateSignatureKeys(body.key);
-    await kms.updateSignatureKeys(
-      userId,
-      keyPair.publicKey,
-      keyPair.privateKey,
-      keyPair.iv,
-      keyPair.tag
-    );
-    return res.status(200).json(1);
+    const kmsConn = await kms.kmsConnection();
+    if (kmsConn) {
+      const keyPair = encryption.generateSignatureKeys(body.key);
+      const key = await kms.updateSignatureKeys(
+        userId,
+        keyPair.publicKey,
+        keyPair.privateKey,
+        keyPair.iv,
+        keyPair.tag
+      );
+      if (key.status === 200) {
+        return res.status(200).json(1);
+      } else {
+        return res.status(500).send("An error has occurred");
+      }
+    } else {
+      return res.status(500).send("An error has occurred");
+    }
   } catch (err) {
     await logger.insertSystemLog("/users/key", err.message, err.stack, "POST");
     return res.status(500).send("An error has occurred");
@@ -1038,59 +1073,77 @@ async function partialRegister(req, res, next) {
     if (user.length === 0) {
       return next(createError(404, "Token not found"));
     }
-    const keys = encryption.generateSignatureKeys(body.sign_key);
-    const password = await bcrypt.hash(body.password, 13);
-    const key = await kms.insertSignature(
-      user[0].id,
-      keys.publicKey,
-      keys.privateKey,
-      keys.iv,
-      keys.tag
-    );
-    if (key.status !== 201) {
-      if (key.status === 400) {
-        if (image) {
-          fs.unlink(
-            `files/images/avatars/${sanitizeImage(image)}`,
-            function (err) {
-              if (err) {
-                throw err;
+    const kmsConn = await kms.kmsConnection();
+    if (kmsConn) {
+      const keys = encryption.generateSignatureKeys(body.sign_key);
+      const password = await bcrypt.hash(body.password, 13);
+      const key = await kms.insertSignature(
+        user[0].id,
+        keys.publicKey,
+        keys.privateKey,
+        keys.iv,
+        keys.tag
+      );
+      if (key.status !== 201) {
+        if (key.status === 400) {
+          if (image) {
+            fs.unlink(
+              `files/images/avatars/${sanitizeImage(image)}`,
+              function (err) {
+                if (err) {
+                  throw err;
+                }
               }
+            );
+          }
+          return next(createError(400, `Duplicate key`));
+        } else {
+          return res.status(500).send("Error inserting user keys");
+        }
+      }
+      if (image) {
+        const fileName = `${Date.now()}-${Math.round(
+          Math.random() * 1e9
+        )}_${image}`;
+        await sharp(`files/images/avatars/${image}`)
+          .resize(180, 180)
+          .toFormat("jpg")
+          .toFile(`files/images/avatars/${fileName}`);
+        fs.unlink(
+          `files/images/avatars/${sanitizeImage(image)}`,
+          function (err) {
+            if (err) {
+              throw err;
             }
-          );
-        }
-        return next(createError(400, `Duplicate key`));
-      } else {
-        return res.status(500).send("Error inserting user keys");
+          }
+        );
+        image = fileName;
       }
-    }
-    if (image) {
-      const fileName = `${Date.now()}-${Math.round(
-        Math.random() * 1e9
-      )}_${image}`;
-      await sharp(`files/images/avatars/${image}`)
-        .resize(180, 180)
-        .toFormat("jpg")
-        .toFile(`files/images/avatars/${fileName}`);
-      fs.unlink(`files/images/avatars/${sanitizeImage(image)}`, function (err) {
-        if (err) {
-          throw err;
+      await sequelize.query(
+        "CALL register_user (:displayName, :password, :image, :token);",
+        {
+          replacements: {
+            displayName: body.display_name,
+            password: password,
+            image: image,
+            token: token,
+          },
         }
-      });
-      image = fileName;
-    }
-    await sequelize.query(
-      "CALL register_user (:displayName, :password, :image, :token);",
-      {
-        replacements: {
-          displayName: body.display_name,
-          password: password,
-          image: image,
-          token: token,
-        },
+      );
+      return res.status(200).json(1);
+    } else {
+      if (image) {
+        fs.unlink(
+          `files/images/avatars/${sanitizeImage(image)}`,
+          function (err) {
+            if (err) {
+              throw err;
+            }
+          }
+        );
       }
-    );
-    return res.status(200).json(1);
+      return res.status(500).send("An error has occurred");
+    }
   } catch (err) {
     await logger.insertSystemLog(
       "/users/register/:token",

@@ -25,7 +25,7 @@ async function listByVoter(req, res, next) {
   });
   try {
     const elections = await sequelize.query(
-      "select eve.id, eve.title, eve.start_date, eve.end_date, eve.created_at, eve.results, evv.voted from e_vote_election eve inner join e_vote_voter evv on eve.id = evv.election_id where evv.user_id = :id",
+      "select eve.id, eve.title, eve.start_date, eve.end_date, eve.created_at, eve.results, evv.voted, eve.detection from e_vote_election eve inner join e_vote_voter evv on eve.id = evv.election_id where evv.user_id = :id",
       {
         type: QueryTypes.SELECT,
         replacements: { id: userId },
@@ -61,13 +61,31 @@ async function listByManager(req, res, next) {
     }
   });
   try {
-    const elections = await sequelize.query(
-      "select eve.id, eve.title, eve.start_date, eve.end_date, eve.created_at, eve.results from e_vote_election eve inner join e_vote_manager evm on eve.id = evm.election_id where evm.user_id = :id;",
+    const user = await sequelize.query(
+      "SELECT * FROM e_vote_user WHERE id = :id",
       {
         type: QueryTypes.SELECT,
         replacements: { id: userId },
       }
     );
+    let elections = "";
+    if (user[0].permission === "MANAGER") {
+      elections = await sequelize.query(
+        "select eve.id, eve.title, eve.start_date, eve.end_date, eve.created_at, eve.results from e_vote_election eve inner join e_vote_manager evm on eve.id = evm.election_id where evm.user_id = :id;",
+        {
+          type: QueryTypes.SELECT,
+          replacements: { id: userId },
+        }
+      );
+    }
+    if (user[0].permission === "AUDITOR") {
+      elections = await sequelize.query(
+        "select eve.id, eve.title, eve.start_date, eve.end_date, eve.created_at, eve.results from e_vote_election eve;",
+        {
+          type: QueryTypes.SELECT,
+        }
+      );
+    }
     for (const election of elections) {
       election["startDate"] = election["start_date"];
       delete election["start_date"];
@@ -90,7 +108,7 @@ async function listByManager(req, res, next) {
 async function showBallot(req, res, next) {
   const id = req.params.id;
   if (!uuidValidator(id, 1)) {
-    return next(createError(400, `id ${id} cannot be validated`));
+    return next(createError(401, `id ${id} cannot be validated`));
   }
   try {
     const election = await sequelize.query(
@@ -100,18 +118,29 @@ async function showBallot(req, res, next) {
         replacements: { id: id },
       }
     );
-    const electionPublicKey = await kms.getElectionPublicKey(id);
-    const candidates = election.map(function (item) {
-      return { id: item.id, name: item.name, image: item.image };
-    });
-    const electionObj = {
-      id: election[0].election_id,
-      title: election[0].title,
-      election_key: electionPublicKey.key,
-      hash_method: "sha512",
-      candidates: candidates,
-    };
-    return res.status(200).json(electionObj);
+    const kmsConn = await kms.kmsConnection();
+    if (kmsConn) {
+      const electionPublicKey = await kms.getElectionPublicKey(id);
+      const candidates = election.map(function (item) {
+        return { id: item.id, name: item.name, image: item.image };
+      });
+      const electionObj = {
+        id: election[0].election_id,
+        title: election[0].title,
+        election_key: electionPublicKey.key,
+        hash_method: "sha512",
+        candidates: candidates,
+      };
+      return res.status(200).json(electionObj);
+    } else {
+      await logger.insertElectionLog(
+        id,
+        election[0].title,
+        `Cannot show ballot, KMS is offline`,
+        "HIGH"
+      );
+      return res.status(400).send("An error has occurred");
+    }
   } catch (err) {
     await logger.insertSystemLog(
       "/elections/:id",
@@ -249,6 +278,25 @@ async function create(req, res, next) {
         transaction,
       }
     );
+    const kmsConn = await kms.kmsConnection();
+    if (!kmsConn) {
+      await transaction.rollback();
+      if (Array.isArray(body.candidates)) {
+        for (const image of req.files) {
+          fs.unlink(
+            `files/images/candidate_images/${sanitizeImage(
+              image.originalname
+            )}`,
+            function (err) {
+              if (err) {
+                throw err;
+              }
+            }
+          );
+        }
+      }
+      return res.status(500).send("An error has occurred");
+    }
     await kms.insertElectionKeys(
       electionId,
       keyPair.publicKey,
@@ -640,6 +688,11 @@ async function remove(req, res, next) {
       replacements: { id: id },
       transaction,
     });
+    const kmsConn = await kms.kmsConnection();
+    if (!kmsConn) {
+      await transaction.rollback();
+      return res.status(400).send("An error has occurred");
+    }
     await kms.deleteElectionKeys(id);
     await logger.insertElectionLog(
       id,
@@ -692,21 +745,26 @@ async function regenerateKeys(req, res, next) {
     if (moment().isAfter(moment(election[0].end_date, "DD-MM-YYYY HH:mm"))) {
       return next(createError(400, `Election has ended`));
     }
-    const keyPair = encryption.generateKeys(body.key);
-    await kms.updateElectionKeys(
-      id,
-      keyPair.publicKey,
-      keyPair.privateKey,
-      keyPair.iv,
-      keyPair.tag
-    );
-    await logger.insertElectionLog(
-      id,
-      election[0].title,
-      `Keys have been regenerated for election with ID: ${id} by user ${username}`,
-      "NONE"
-    );
-    return res.status(200).json(1);
+    const kmsConn = await kms.kmsConnection();
+    if (kmsConn) {
+      const keyPair = encryption.generateKeys(body.key);
+      await kms.updateElectionKeys(
+        id,
+        keyPair.publicKey,
+        keyPair.privateKey,
+        keyPair.iv,
+        keyPair.tag
+      );
+      await logger.insertElectionLog(
+        id,
+        election[0].title,
+        `Keys have been regenerated for election with ID: ${id} by user ${username}`,
+        "NONE"
+      );
+      return res.status(200).json(1);
+    } else {
+      return res.status(500).send("An error has occurred");
+    }
   } catch (err) {
     await logger.insertSystemLog(
       "/elections/:id",
@@ -730,21 +788,100 @@ async function createSignature(req, res, next) {
     }
   });
   try {
-    const signaturePrivateKey = await kms.getSignaturePrivateKey(userId);
-    const signature = encryption.sign(
-      Buffer.from(body.data),
-      signaturePrivateKey.key,
-      body.key,
-      signaturePrivateKey.iv,
-      signaturePrivateKey.tag
-    );
-    return res.status(200).json({ data: signature });
+    const kmsConn = await kms.kmsConnection();
+    if (kmsConn) {
+      const signaturePrivateKey = await kms.getSignaturePrivateKey(userId);
+      const signature = encryption.sign(
+        Buffer.from(body.data),
+        signaturePrivateKey.key,
+        body.key,
+        signaturePrivateKey.iv,
+        signaturePrivateKey.tag
+      );
+      return res.status(200).json({ data: signature });
+    } else {
+      return res.status(400).send("An error has occurred");
+    }
   } catch (err) {
     await logger.insertSystemLog(
       "/elections/signature",
       err.message,
       err.stack,
       "POST"
+    );
+    return res.status(500).send("An error has occurred");
+  }
+}
+
+async function showFrauds(req, res, next) {
+  try {
+    const frauds = await sequelize.query(
+      "SELECT * from e_vote_election WHERE detection = true;",
+      {
+        type: QueryTypes.SELECT,
+      }
+    );
+    return res.status(200).json(frauds);
+  } catch (err) {
+    await logger.insertSystemLog(
+      "/elections/fraud",
+      err.message,
+      err.stack,
+      "GET"
+    );
+    return res.status(500).send("An error has occurred");
+  }
+}
+
+async function removeFraud(req, res, next) {
+  const id = req.params.id;
+  const body = req.body;
+  const token = req.cookies.token;
+  if (!uuidValidator(id, 1)) {
+    return next(createError(401, `id ${id} cannot be validated`));
+  }
+  let username = "";
+  jwt.verify(token, process.env.JWT_SECRET, {}, function (err, decoded) {
+    if (err) {
+      return next(createError(401, "Invalid Token"));
+    } else {
+      username = decoded.username;
+    }
+  });
+  try {
+    const fraud = await sequelize.query(
+      "SELECT * from e_vote_election WHERE id = :id;",
+      {
+        type: QueryTypes.SELECT,
+        replacements: { id: id },
+      }
+    );
+    if (Array.isArray(fraud)) {
+      if (fraud.length === 1) {
+        if (typeof body.reason === "string") {
+          await sequelize.query("CALL remove_fraud (:id);", {
+            replacements: { id: id },
+          });
+          await logger.insertElectionLog(
+            id,
+            fraud[0].title,
+            `Auditor ${username} removed fraud. Reason: ${body.reason}`,
+            "HIGH"
+          );
+          return res.status(200).json(1);
+        } else {
+          return res.status(500).send("An error has occurred");
+        }
+      }
+    } else {
+      return res.status(500).send("An error has occurred");
+    }
+  } catch (err) {
+    await logger.insertSystemLog(
+      "/elections/fraud/:id",
+      err.message,
+      err.stack,
+      "PATCH"
     );
     return res.status(500).send("An error has occurred");
   }
@@ -760,4 +897,6 @@ module.exports = {
   remove,
   regenerateKeys,
   createSignature,
+  showFrauds,
+  removeFraud,
 };

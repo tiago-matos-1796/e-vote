@@ -24,27 +24,23 @@ async function insertSignature(id, publicKey, privateKey, iv, tag) {
     tag: tag,
   };
   const uri = `${process.env.KMS_URI}keys/user`;
-  try {
-    return await axios
-      .post(
-        uri,
-        { data: KMSEncrypt(JSON.stringify(keyObj)) },
-        {
-          headers: {
-            "access-token": process.env.KMS_TOKEN,
-            "Content-type": "application/json",
-          },
-        }
-      )
-      .then(() => {
-        return 1;
-      })
-      .catch(() => {
-        return 0;
-      });
-  } catch (err) {
-    console.error(err);
-  }
+  return await axios
+    .post(
+      uri,
+      { data: KMSEncrypt(JSON.stringify(keyObj)) },
+      {
+        headers: {
+          "access-token": process.env.KMS_TOKEN,
+          "Content-type": "application/json",
+        },
+      }
+    )
+    .then((response) => {
+      return response;
+    })
+    .catch((error) => {
+      return error;
+    });
 }
 
 async function insertElectionKeys(id, publicKey, privateKey, iv, tag) {
@@ -56,27 +52,23 @@ async function insertElectionKeys(id, publicKey, privateKey, iv, tag) {
     tag: tag,
   };
   const uri = `${process.env.KMS_URI}keys/election`;
-  try {
-    return await axios
-      .post(
-        uri,
-        { data: KMSEncrypt(JSON.stringify(keyObj)) },
-        {
-          headers: {
-            "access-token": process.env.KMS_TOKEN,
-            "Content-type": "application/json",
-          },
-        }
-      )
-      .then(() => {
-        return 1;
-      })
-      .catch(() => {
-        return 0;
-      });
-  } catch (err) {
-    console.error(err);
-  }
+  return await axios
+    .post(
+      uri,
+      { data: KMSEncrypt(JSON.stringify(keyObj)) },
+      {
+        headers: {
+          "access-token": process.env.KMS_TOKEN,
+          "Content-type": "application/json",
+        },
+      }
+    )
+    .then((response) => {
+      return response;
+    })
+    .catch((error) => {
+      return error;
+    });
 }
 
 async function getElectionPublicKey(id) {
@@ -90,7 +82,7 @@ async function getElectionPublicKey(id) {
     });
     return JSON.parse(KMSDecrypt(key.data));
   } catch (err) {
-    console.error(err);
+    return err;
   }
 }
 
@@ -105,7 +97,7 @@ async function getElectionPrivateKey(id) {
     });
     return JSON.parse(KMSDecrypt(key.data));
   } catch (err) {
-    console.error(err);
+    return err;
   }
 }
 
@@ -120,7 +112,7 @@ async function getSignaturePrivateKey(id) {
     });
     return JSON.parse(KMSDecrypt(key.data));
   } catch (err) {
-    console.error(err);
+    return err;
   }
 }
 
@@ -135,7 +127,7 @@ async function getSignaturePublicKey(id) {
     });
     return JSON.parse(KMSDecrypt(key.data));
   } catch (err) {
-    console.error(err);
+    return err;
   }
 }
 
@@ -147,27 +139,23 @@ async function updateElectionKeys(id, publicKey, privateKey, iv, tag) {
     iv: iv,
     tag: tag,
   };
-  try {
-    return await axios
-      .patch(
-        uri,
-        { data: KMSEncrypt(JSON.stringify(keyObj)) },
-        {
-          headers: {
-            "access-token": process.env.KMS_TOKEN,
-            "Content-type": "application/json",
-          },
-        }
-      )
-      .then(() => {
-        return 1;
-      })
-      .catch(() => {
-        return 0;
-      });
-  } catch (err) {
-    console.error(err);
-  }
+  return await axios
+    .patch(
+      uri,
+      { data: KMSEncrypt(JSON.stringify(keyObj)) },
+      {
+        headers: {
+          "access-token": process.env.KMS_TOKEN,
+          "Content-type": "application/json",
+        },
+      }
+    )
+    .then((response) => {
+      return response;
+    })
+    .catch((error) => {
+      return error;
+    });
 }
 
 async function updateSignatureKeys(id, publicKey, privateKey, iv, tag) {
@@ -178,69 +166,57 @@ async function updateSignatureKeys(id, publicKey, privateKey, iv, tag) {
     iv: iv,
     tag: tag,
   };
-  try {
-    return await axios
-      .patch(
-        uri,
-        { data: KMSEncrypt(JSON.stringify(keyObj)) },
-        {
-          headers: {
-            "access-token": process.env.KMS_TOKEN,
-            "Content-type": "application/json",
-          },
-        }
-      )
-      .then(() => {
-        return 1;
-      })
-      .catch(() => {
-        return 0;
-      });
-  } catch (err) {
-    console.error(err);
-  }
+  return await axios
+    .patch(
+      uri,
+      { data: KMSEncrypt(JSON.stringify(keyObj)) },
+      {
+        headers: {
+          "access-token": process.env.KMS_TOKEN,
+          "Content-type": "application/json",
+        },
+      }
+    )
+    .then((response) => {
+      return response;
+    })
+    .catch((error) => {
+      return error;
+    });
 }
 
 async function deleteElectionKeys(id) {
   const uri = `${process.env.KMS_URI}keys/election/${id}`;
-  try {
-    return await axios
-      .delete(uri, {
-        headers: {
-          "access-token": process.env.KMS_TOKEN,
-          "Content-type": "application/json",
-        },
-      })
-      .then(() => {
-        return 1;
-      })
-      .catch(() => {
-        return 0;
-      });
-  } catch (err) {
-    console.error(err);
-  }
+  return await axios
+    .delete(uri, {
+      headers: {
+        "access-token": process.env.KMS_TOKEN,
+        "Content-type": "application/json",
+      },
+    })
+    .then((response) => {
+      return response;
+    })
+    .catch((error) => {
+      return error;
+    });
 }
 
 async function deleteSignatureKeys(id) {
   const uri = `${process.env.KMS_URI}keys/user/${id}`;
-  try {
-    return await axios
-      .delete(uri, {
-        headers: {
-          "access-token": process.env.KMS_TOKEN,
-          "Content-type": "application/json",
-        },
-      })
-      .then(() => {
-        return 1;
-      })
-      .catch(() => {
-        return 0;
-      });
-  } catch (err) {
-    console.error(err);
-  }
+  return await axios
+    .delete(uri, {
+      headers: {
+        "access-token": process.env.KMS_TOKEN,
+        "Content-type": "application/json",
+      },
+    })
+    .then((response) => {
+      return response;
+    })
+    .catch((error) => {
+      return error;
+    });
 }
 
 module.exports = {

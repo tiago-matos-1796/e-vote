@@ -38,7 +38,7 @@ module.exports = (app) => {
       message: "Too many requests",
     }),
     auth,
-    access(["MANAGER"]),
+    access(["MANAGER", "AUDITOR"]),
     statisticsController.showStatus
   );
   router.get(
@@ -50,7 +50,7 @@ module.exports = (app) => {
       message: "Too many requests",
     }),
     auth,
-    access(["MANAGER"]),
+    access(["MANAGER", "AUDITOR"]),
     statisticsController.showResults
   );
   router.get(

@@ -80,8 +80,17 @@ async function vote(req, res, next) {
       );
       return next(createError(400, `Vote content could not be validated`));
     }
+    const kmsConn = await kms.kmsConnection();
+    if (!kmsConn) {
+      await logger.insertElectionLog(
+        id,
+        election[0].title,
+        `${decodedToken.username} could not submit its vote, KMS is offline`,
+        "HIGH"
+      );
+      return res.status(500).send("An error has occurred");
+    }
     const signaturePublicKey = await kms.getSignaturePublicKey(decodedToken.id);
-    console.log(body.signature);
     if (!encryption.verify(body.vote, signaturePublicKey.key, body.signature)) {
       await logger.insertElectionLog(
         id,
@@ -145,6 +154,7 @@ async function showStatus(req, res, next) {
 async function countVotes(req, res, next) {
   const id = req.params.id;
   const body = req.body;
+  let detection = false;
   const token = req.cookies.token;
   let username = "";
   jwt.verify(token, process.env.JWT_SECRET, {}, function (err, decoded) {
@@ -155,7 +165,7 @@ async function countVotes(req, res, next) {
     }
   });
   if (!uuidValidator(id, 1)) {
-    return next(createError(400, `id ${id} cannot be validated`));
+    return next(createError(401, `id ${id} cannot be validated`));
   }
   try {
     const election = await sequelize.query(
@@ -184,13 +194,23 @@ async function countVotes(req, res, next) {
     const params = { id: id };
     const votes = await client.execute(query, params, { prepare: true });
     if (votes.rows.length !== voters.length) {
+      detection = true;
       await logger.insertElectionLog(
         id,
         election[0].title,
         `Recorded votes do not match the amount of votes submitted by voters`,
         "HIGH"
       );
-      return next(createError(403, `Possible fraud detected`));
+    }
+    const kmsConn = await kms.kmsConnection();
+    if (!kmsConn) {
+      await logger.insertElectionLog(
+        id,
+        election[0].title,
+        `Could not count votes, KMS is offline`,
+        "MEDIUM"
+      );
+      return res.status(400).send("An error has occurred");
     }
     const decryptionKey = await kms.getElectionPrivateKey(id);
     const decryptedVotes = [];
@@ -229,11 +249,16 @@ async function countVotes(req, res, next) {
       `${username} ordered votes be counted`,
       "NONE"
     );
-    await sequelize.query("CALL insert_election_results(:id, :results);", {
-      replacements: { id: id, results: results },
-    });
+    await sequelize.query(
+      "CALL insert_election_results(:id, :results, :detection);",
+      {
+        replacements: { id: id, results: results, detection: detection },
+      }
+    );
     await createReports(sanitize(id), voteCount);
-    return res.status(200).send("Counted with success");
+    return res
+      .status(200)
+      .json({ message: "Counted with success", detection: detection });
   } catch (err) {
     await logger.insertSystemLog(
       "/vote/count/:id",
@@ -249,7 +274,7 @@ async function showResults(req, res, next) {
   const id = req.params.id;
   try {
     const results = await sequelize.query(
-      "SELECT results, pdf, xlsx from e_vote_election WHERE id = :id;",
+      "SELECT results, pdf, xlsx, detection from e_vote_election WHERE id = :id;",
       {
         type: QueryTypes.SELECT,
         replacements: { id: id },
@@ -303,6 +328,7 @@ async function showResults(req, res, next) {
       voteData: candidateVotes,
       pdf: results[0].pdf,
       xlsx: results[0].xlsx,
+      detection: results[0].detection,
     });
   } catch (err) {
     await logger.insertSystemLog(
