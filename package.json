@@ -43,7 +43,7 @@
     "nunjucks": "^3.2.4",
     "pdfkit": "^0.13.0",
     "pdfkit-table": "^0.1.99",
-    "pg": "^8.10.0",
+    "pg": "^8.11.1",
     "pg-hstore": "^2.3.4",
     "postgres-date": "^2.1.0",
     "prettier": "^2.8.8",
