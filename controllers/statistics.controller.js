@@ -30,7 +30,7 @@ async function vote(req, res, next) {
     return next(createError(400, `id ${id} cannot be validated`));
   }
   try {
-    const hash = crypto.createHash("sha512");
+    const hash = encryption.createHash(body.vote, body.key);
     const election = await sequelize.query(
       "SELECT * from e_vote_election WHERE id = :id",
       {
@@ -71,7 +71,7 @@ async function vote(req, res, next) {
       );
       return next(createError(400, `Already voted`));
     }
-    if (body.hash !== hash.update(body.vote, "utf8").digest("base64")) {
+    if (body.hash !== hash) {
       await logger.insertElectionLog(
         id,
         election[0].title,

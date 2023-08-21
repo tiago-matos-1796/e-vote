@@ -128,7 +128,6 @@ async function showBallot(req, res, next) {
         id: election[0].election_id,
         title: election[0].title,
         election_key: electionPublicKey.key,
-        hash_method: "sha512",
         candidates: candidates,
       };
       return res.status(200).json(electionObj);
@@ -798,7 +797,8 @@ async function createSignature(req, res, next) {
         signaturePrivateKey.iv,
         signaturePrivateKey.tag
       );
-      return res.status(200).json({ data: signature });
+      const hash = encryption.createHash(body.data, body.key);
+      return res.status(200).json({ signature: signature, hash: hash });
     } else {
       return res.status(400).send("An error has occurred");
     }

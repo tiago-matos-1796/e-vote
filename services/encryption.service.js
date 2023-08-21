@@ -99,6 +99,12 @@ function verify(data, publicKey, signature) {
   );
 }
 
+function createHash(data, secret) {
+  const hmac = crypto.createHmac(process.env.VOTE_HASH, secret);
+  hmac.update(data);
+  return hmac.digest("base64");
+}
+
 function internalEncrypt(data) {
   const cipher = crypto.createCipheriv(
     internal_algorithm,
@@ -156,6 +162,7 @@ module.exports = {
   generateSignatureKeys,
   sign,
   verify,
+  createHash,
   internalEncrypt,
   internalDecrypt,
   KMSEncrypt,

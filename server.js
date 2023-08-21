@@ -35,18 +35,42 @@ app.use(cookieParser());
 app.use(bodyParser.urlencoded({ extended: true }));
 
 const { access } = require("./middleware/permission.middleware");
+const { limit } = require("express-limit");
 require("./routes/users.route")(app);
 require("./routes/election.route")(app);
 require("./routes/statistics.route")(app);
 require("./routes/log.route")(app);
 
-app.use("/candidate-images", express.static("files/images/candidate_images"));
-app.use("/avatars", express.static("files/images/avatars"));
-app.use("/api-images", express.static("files/images/api_images"));
+app.use(
+  "/candidate-images",
+  limit({
+    max: 100,
+    period: 60 * 1000,
+    status: 429,
+    message: "Too many requests",
+  }),
+  express.static("files/images/candidate_images")
+);
+app.use(
+  "/avatars",
+  limit({
+    max: 100,
+    period: 60 * 1000,
+    status: 429,
+    message: "Too many requests",
+  }),
+  express.static("files/images/avatars")
+);
 app.use(
   "/exports/pdf",
   auth,
   access(["MANAGER"]),
+  limit({
+    max: 100,
+    period: 60 * 1000,
+    status: 429,
+    message: "Too many requests",
+  }),
   express.static("files/reports/pdf", {
     setHeaders: (res, filepath) =>
       res.set(
