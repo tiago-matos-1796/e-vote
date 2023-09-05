@@ -10,20 +10,7 @@ const auth = require("./middleware/auth.middleware");
 
 const app = express();
 app.disable("x-powered-by");
-app.use(
-  cors({
-    methods: ["GET", "PUT", "PATCH", "POST", "DELETE"],
-    allowedHeaders: ["Origin", "X-Requested-With", "Content-Type", "Accept"],
-    credentials: true,
-    maxAge: 31536000,
-    preflightContinue: true,
-    optionsSuccessStatus: 200,
-  })
-);
 app.use(function (req, res, next) {
-  res.header("Access-Control-Allow-Origin", process.env.FRONTEND_URI);
-  res.setHeader("Content-Security-Policy", "default-src 'self'");
-  res.setHeader("X-XSS-Protection", "1; mode=block");
   res.setHeader("X-Powered-By", "PHP/7.4.30");
   return next();
 });

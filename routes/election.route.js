@@ -3,11 +3,30 @@ const router = express.Router();
 const auth = require("../middleware/auth.middleware");
 const { access } = require("../middleware/permission.middleware");
 const { uploadCandidateImage } = require("../configs/multer.config");
-const electionController = require("../controllers/election.controller");
+const cors = require("cors");
+const helmet = require("helmet");
 const limit = require("express-limit").limit;
 
 module.exports = (app) => {
   const electionController = require("../controllers/election.controller");
+  app.use(
+    helmet({
+      crossOriginResourcePolicy: {
+        policy: "same-site",
+      },
+    })
+  );
+  app.use(
+    cors({
+      origin: process.env.FRONTEND_URI,
+      methods: ["GET", "PUT", "PATCH", "POST", "DELETE"],
+      allowedHeaders: ["Origin", "X-Requested-With", "Content-Type", "Accept"],
+      credentials: true,
+      maxAge: 31536000,
+      preflightContinue: true,
+      optionsSuccessStatus: 200,
+    })
+  );
   router.get(
     "/voter",
     limit({
