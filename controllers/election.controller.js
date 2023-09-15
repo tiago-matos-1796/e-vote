@@ -107,10 +107,29 @@ async function listByManager(req, res, next) {
 
 async function showBallot(req, res, next) {
   const id = req.params.id;
+  const token = req.cookies.token;
   if (!uuidValidator(id, 1)) {
     return next(createError(401, `id ${id} cannot be validated`));
   }
+  let userId = "";
+  jwt.verify(token, process.env.JWT_SECRET, {}, function (err, decoded) {
+    if (err) {
+      res.status(401).send("Invalid Token");
+    } else {
+      userId = decoded.id;
+    }
+  });
   try {
+    const voter = await sequelize.query(
+      "SELECT * from e_vote_voter WHERE user_id = :user AND election_id = :election",
+      {
+        type: QueryTypes.SELECT,
+        replacements: { user: userId, election: id },
+      }
+    );
+    if (voter.length === 0) {
+      return next(createError(400, `Not voter in this election`));
+    }
     const election = await sequelize.query(
       "select * from e_vote_election eve join e_vote_candidate evc on eve.id = evc.election_id where eve.id = :id;",
       {
