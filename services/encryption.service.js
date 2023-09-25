@@ -3,6 +3,7 @@ const { Buffer } = require("buffer");
 const algorithm = "aes-128-gcm";
 const internal_algorithm = "aes-256-gcm";
 const signature_hash = "SHA256";
+const ECDSA_curve = "sect571k1";
 
 function generateKeys(key) {
   const { publicKey, privateKey } = crypto.generateKeyPairSync("rsa", {
@@ -54,7 +55,7 @@ function decrypt(encryptedData, privateKey, key, iv, tag) {
 
 function generateSignatureKeys(key) {
   const { privateKey, publicKey } = crypto.generateKeyPairSync("ec", {
-    namedCurve: "sect233k1",
+    namedCurve: ECDSA_curve,
     publicKeyEncoding: {
       type: "spki",
       format: "pem",
