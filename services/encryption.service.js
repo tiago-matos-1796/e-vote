@@ -17,7 +17,7 @@ function generateKeys(key) {
       format: "pem",
     },
   });
-  const iv = crypto.randomBytes(16);
+  const iv = crypto.randomBytes(32);
   const cipher = crypto.createCipheriv(algorithm, key, iv);
   let encryptedData = cipher.update(privateKey.toString(), "utf8", "base64");
   encryptedData += cipher.final("base64");
@@ -65,7 +65,7 @@ function generateSignatureKeys(key) {
       format: "pem",
     },
   });
-  const iv = crypto.randomBytes(16);
+  const iv = crypto.randomBytes(32);
   const cipher = crypto.createCipheriv(algorithm, key, iv);
   let encryptedData = cipher.update(privateKey.toString(), "utf8", "base64");
   encryptedData += cipher.final("base64");
@@ -155,7 +155,7 @@ function internalDecrypt(data) {
 }
 
 function KMSEncrypt(data, key, publicKey, commId) {
-  const iv = crypto.randomBytes(16);
+  const iv = crypto.randomBytes(32);
   const cipher = crypto.createCipheriv(algorithm, key, iv);
   let encryptedData = cipher.update(data, "utf8", "base64");
   encryptedData += cipher.final("base64");
