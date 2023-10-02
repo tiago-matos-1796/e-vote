@@ -1,5 +1,9 @@
 const axios = require("axios");
-const { KMSEncrypt, KMSDecrypt } = require("../services/encryption.service");
+const {
+  createSecret,
+  KMSEncrypt,
+  KMSDecrypt,
+} = require("../services/encryption.service");
 
 async function kmsConnection() {
   const uri = `${process.env.KMS_URI}keys/`;
@@ -15,7 +19,31 @@ async function kmsConnection() {
   }
 }
 
-async function insertSignature(id, publicKey, privateKey, iv, tag) {
+async function createCommunication(id) {
+  const uri = `${process.env.KMS_URI}keys/create-communication/${id}`;
+  try {
+    const comm = await axios.get(uri, {
+      headers: {
+        "access-token": process.env.KMS_TOKEN,
+        "Content-type": "application/json",
+      },
+    });
+    return comm.data;
+  } catch (err) {
+    console.log("Could not connect to KMS");
+  }
+}
+
+async function insertSignature(
+  id,
+  publicKey,
+  privateKey,
+  iv,
+  tag,
+  key,
+  ecdhPublicKey,
+  commId
+) {
   const keyObj = {
     _id: id,
     public_key: publicKey,
@@ -25,16 +53,12 @@ async function insertSignature(id, publicKey, privateKey, iv, tag) {
   };
   const uri = `${process.env.KMS_URI}keys/user`;
   return await axios
-    .post(
-      uri,
-      { data: KMSEncrypt(JSON.stringify(keyObj)) },
-      {
-        headers: {
-          "access-token": process.env.KMS_TOKEN,
-          "Content-type": "application/json",
-        },
-      }
-    )
+    .post(uri, KMSEncrypt(JSON.stringify(keyObj), key, ecdhPublicKey, commId), {
+      headers: {
+        "access-token": process.env.KMS_TOKEN,
+        "Content-type": "application/json",
+      },
+    })
     .then((response) => {
       return response;
     })
@@ -43,7 +67,16 @@ async function insertSignature(id, publicKey, privateKey, iv, tag) {
     });
 }
 
-async function insertElectionKeys(id, publicKey, privateKey, iv, tag) {
+async function insertElectionKeys(
+  id,
+  publicKey,
+  privateKey,
+  iv,
+  tag,
+  key,
+  ecdhPublicKey,
+  commId
+) {
   const keyObj = {
     _id: id,
     public_key: publicKey,
@@ -53,16 +86,12 @@ async function insertElectionKeys(id, publicKey, privateKey, iv, tag) {
   };
   const uri = `${process.env.KMS_URI}keys/election`;
   return await axios
-    .post(
-      uri,
-      { data: KMSEncrypt(JSON.stringify(keyObj)) },
-      {
-        headers: {
-          "access-token": process.env.KMS_TOKEN,
-          "Content-type": "application/json",
-        },
-      }
-    )
+    .post(uri, KMSEncrypt(JSON.stringify(keyObj), key, ecdhPublicKey, commId), {
+      headers: {
+        "access-token": process.env.KMS_TOKEN,
+        "Content-type": "application/json",
+      },
+    })
     .then((response) => {
       return response;
     })
@@ -71,67 +100,92 @@ async function insertElectionKeys(id, publicKey, privateKey, iv, tag) {
     });
 }
 
-async function getElectionPublicKey(id) {
+async function getElectionPublicKey(id, publicKey, cipher) {
   const uri = `${process.env.KMS_URI}keys/election/public/${id}`;
   try {
     const key = await axios.get(uri, {
       headers: {
         "access-token": process.env.KMS_TOKEN,
+        "public-key": publicKey,
         "Content-type": "application/json",
       },
     });
-    return JSON.parse(KMSDecrypt(key.data));
+    const secret = createSecret(key.data.public_key, cipher);
+    return JSON.parse(
+      KMSDecrypt(key.data.data, secret, key.data.iv, key.data.tag)
+    );
   } catch (err) {
     return err;
   }
 }
 
-async function getElectionPrivateKey(id) {
+async function getElectionPrivateKey(id, publicKey, cipher) {
   const uri = `${process.env.KMS_URI}keys/election/private/${id}`;
   try {
     const key = await axios.get(uri, {
       headers: {
         "access-token": process.env.KMS_TOKEN,
+        "public-key": publicKey,
         "Content-type": "application/json",
       },
     });
-    return JSON.parse(KMSDecrypt(key.data));
+    const secret = createSecret(key.data.public_key, cipher);
+    return JSON.parse(
+      KMSDecrypt(key.data.data, secret, key.data.iv, key.data.tag)
+    );
   } catch (err) {
     return err;
   }
 }
 
-async function getSignaturePrivateKey(id) {
+async function getSignaturePrivateKey(id, publicKey, cipher) {
   const uri = `${process.env.KMS_URI}keys/user/private/${id}`;
   try {
     const key = await axios.get(uri, {
       headers: {
         "access-token": process.env.KMS_TOKEN,
+        "public-key": publicKey,
         "Content-type": "application/json",
       },
     });
-    return JSON.parse(KMSDecrypt(key.data));
+    const secret = createSecret(key.data.public_key, cipher);
+    return JSON.parse(
+      KMSDecrypt(key.data.data, secret, key.data.iv, key.data.tag)
+    );
   } catch (err) {
     return err;
   }
 }
 
-async function getSignaturePublicKey(id) {
+async function getSignaturePublicKey(id, publicKey, cipher) {
   const uri = `${process.env.KMS_URI}keys/user/public/${id}`;
   try {
     const key = await axios.get(uri, {
       headers: {
         "access-token": process.env.KMS_TOKEN,
+        "public-key": publicKey,
         "Content-type": "application/json",
       },
     });
-    return JSON.parse(KMSDecrypt(key.data));
+    const secret = createSecret(key.data.public_key, cipher);
+    return JSON.parse(
+      KMSDecrypt(key.data.data, secret, key.data.iv, key.data.tag)
+    );
   } catch (err) {
     return err;
   }
 }
 
-async function updateElectionKeys(id, publicKey, privateKey, iv, tag) {
+async function updateElectionKeys(
+  id,
+  publicKey,
+  privateKey,
+  iv,
+  tag,
+  key,
+  ecdhPublicKey,
+  commId
+) {
   const uri = `${process.env.KMS_URI}keys/election/${id}`;
   const keyObj = {
     public_key: publicKey,
@@ -142,7 +196,7 @@ async function updateElectionKeys(id, publicKey, privateKey, iv, tag) {
   return await axios
     .patch(
       uri,
-      { data: KMSEncrypt(JSON.stringify(keyObj)) },
+      KMSEncrypt(JSON.stringify(keyObj), key, ecdhPublicKey, commId),
       {
         headers: {
           "access-token": process.env.KMS_TOKEN,
@@ -158,7 +212,16 @@ async function updateElectionKeys(id, publicKey, privateKey, iv, tag) {
     });
 }
 
-async function updateSignatureKeys(id, publicKey, privateKey, iv, tag) {
+async function updateSignatureKeys(
+  id,
+  publicKey,
+  privateKey,
+  iv,
+  tag,
+  key,
+  ecdhPublicKey,
+  commId
+) {
   const uri = `${process.env.KMS_URI}keys/user/${id}`;
   const keyObj = {
     public_key: publicKey,
@@ -169,7 +232,7 @@ async function updateSignatureKeys(id, publicKey, privateKey, iv, tag) {
   return await axios
     .patch(
       uri,
-      { data: KMSEncrypt(JSON.stringify(keyObj)) },
+      KMSEncrypt(JSON.stringify(keyObj), key, ecdhPublicKey, commId),
       {
         headers: {
           "access-token": process.env.KMS_TOKEN,
@@ -221,6 +284,7 @@ async function deleteSignatureKeys(id) {
 
 module.exports = {
   kmsConnection,
+  createCommunication,
   insertSignature,
   insertElectionKeys,
   getElectionPublicKey,

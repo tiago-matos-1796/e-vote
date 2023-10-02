@@ -7,6 +7,7 @@ const { uploadAvatar } = require("../configs/multer.config");
 const { limit } = require("express-limit");
 const cors = require("cors");
 const helmet = require("helmet");
+const userController = require("../controllers/users.controller");
 
 module.exports = (app) => {
   const userController = require("../controllers/users.controller");
@@ -124,7 +125,17 @@ module.exports = (app) => {
     userController.adminUserDelete
   );
   router.patch(
-    "/register/:token",
+    "/verify",
+    limit({
+      max: 100,
+      period: 60 * 1000,
+      status: 429,
+      message: "Too many requests",
+    }),
+    userController.verify
+  );
+  router.patch(
+    "/register",
     limit({
       max: 100,
       period: 60 * 1000,
@@ -135,17 +146,7 @@ module.exports = (app) => {
     userController.partialRegister
   );
   router.patch(
-    "/verify/:token",
-    limit({
-      max: 100,
-      period: 60 * 1000,
-      status: 429,
-      message: "Too many requests",
-    }),
-    userController.verify
-  );
-  router.patch(
-    "/password-recovery/:token",
+    "/password-recovery",
     limit({
       max: 100,
       period: 60 * 1000,

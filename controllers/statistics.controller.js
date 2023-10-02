@@ -30,7 +30,8 @@ async function vote(req, res, next) {
     return next(createError(400, `id ${id} cannot be validated`));
   }
   try {
-    const hash = encryption.createHash(body.vote, body.key);
+    const key_ext = crypto.pbkdf2Sync(body.key, "salt", 100000, 22, "sha256");
+    const hash = encryption.createHash(body.vote, key_ext.toString("base64"));
     const election = await sequelize.query(
       "SELECT * from e_vote_election WHERE id = :id",
       {
@@ -90,7 +91,12 @@ async function vote(req, res, next) {
       );
       return res.status(500).send("An error has occurred");
     }
-    const signaturePublicKey = await kms.getSignaturePublicKey(decodedToken.id);
+    const ecdh = encryption.generateECDHKeys();
+    const signaturePublicKey = await kms.getSignaturePublicKey(
+      decodedToken.id,
+      ecdh.public,
+      ecdh.cipher
+    );
     if (!encryption.verify(body.vote, signaturePublicKey.key, body.signature)) {
       await logger.insertElectionLog(
         id,
@@ -212,13 +218,19 @@ async function countVotes(req, res, next) {
       );
       return res.status(400).send("An error has occurred");
     }
-    const decryptionKey = await kms.getElectionPrivateKey(id);
+    const ecdh = encryption.generateECDHKeys();
+    const decryptionKey = await kms.getElectionPrivateKey(
+      id,
+      ecdh.public,
+      ecdh.cipher
+    );
+    const key_ext = crypto.pbkdf2Sync(body.key, "salt", 100000, 22, "sha256");
     const decryptedVotes = [];
     for (const vote of votes.rows) {
       const decryptedVote = encryption.decrypt(
         vote.vote,
         decryptionKey.key,
-        body.key,
+        key_ext.toString("base64"),
         decryptionKey.iv,
         decryptionKey.tag
       );

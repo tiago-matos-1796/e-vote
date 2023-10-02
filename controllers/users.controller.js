@@ -98,7 +98,7 @@ async function register(req, res, next) {
       }
     }
     if (typeof body.sign_key === "string") {
-      if (body.sign_key.length !== 16) {
+      if (body.sign_key.length < 12) {
         if (image) {
           fs.unlink(
             `files/images/avatars/${sanitizeImage(image)}`,
@@ -109,12 +109,27 @@ async function register(req, res, next) {
             }
           );
         }
-        return next(createError(400, `Signature key must have a length of 16`));
+        return next(
+          createError(400, `Signature key must have a length of at least 12`)
+        );
       }
     }
     const kms_conn = await kms.kmsConnection();
     if (kms_conn) {
-      const keys = encryption.generateSignatureKeys(body.sign_key);
+      const communicationId = uuid.v4();
+      const ecdh = encryption.generateECDHKeys();
+      const publicKey = await kms.createCommunication(communicationId);
+      const secret = encryption.createSecret(publicKey.public, ecdh.cipher);
+      const sign_ext = crypto.pbkdf2Sync(
+        body.sign_key,
+        "salt",
+        100000,
+        22,
+        "sha256"
+      );
+      const keys = encryption.generateSignatureKeys(
+        sign_ext.toString("base64")
+      );
       const username =
         typeof body.email === "string"
           ? body.email.split("@")[0] + Date.now().toString()
@@ -127,7 +142,10 @@ async function register(req, res, next) {
         keys.publicKey,
         keys.privateKey,
         keys.iv,
-        keys.tag
+        keys.tag,
+        secret,
+        ecdh.public,
+        communicationId
       );
       if (key.status !== 201) {
         if (key.status === 400) {
@@ -184,13 +202,13 @@ async function register(req, res, next) {
           },
         }
       );
-      const link = `${process.env.FRONTEND_URI}/verification?token=${activation_token}`;
+      const link = `${process.env.FRONTEND_URI}/verification`;
       const mailOptions = {
         from: "UAlg Secure Vote",
         to: body.email,
         subject: "Register",
         text: "Thank you for registering in UAlg secure vote",
-        html: `<b>Hey ${body.display_name}! </b><br> Thank you for registering in UAlg secure vote<br>Please use the following link to verify your account:<br><a href="${link}">${link}</a>`,
+        html: `<b>Hey ${body.display_name}! </b><br> Thank you for registering in UAlg secure vote<br>Your verification token is ${activation_token}<br>Please use the following link to verify your account:<br><a href="${link}">${link}</a>`,
       };
       await transporter.sendMail(mailOptions, (err, info) => {
         if (err) {
@@ -223,26 +241,26 @@ async function register(req, res, next) {
 }
 
 async function verify(req, res, next) {
-  const token = req.params.token;
+  const body = req.body;
   try {
     const account = await sequelize.query(
       "SELECT * FROM e_vote_user WHERE activation_token = :token",
       {
         type: QueryTypes.SELECT,
-        replacements: { token: token },
+        replacements: { token: body.token },
       }
     );
     if (account.length === 0) {
-      return next(createError(400, "Token does not exist"));
+      return res.status(400).json({ message: "Token does not exist" });
     }
     await sequelize.query("CALL verify_account (:token);", {
       type: QueryTypes.SELECT,
-      replacements: { token: token },
+      replacements: { token: body.token },
     });
     return res.status(200).json(1);
   } catch (err) {
     await logger.insertSystemLog(
-      "/users/verify/:token",
+      "/users/verify",
       err.message,
       err.stack,
       "PATCH"
@@ -327,12 +345,12 @@ async function forgotPassword(req, res, next) {
         token: token,
       },
     });
-    const link = `http://localhost:5173/recovery?token=${token}`;
+    const link = `http://localhost:5173/recovery`;
     const mailOptions = {
       from: "UAlg Secure Vote",
       to: body.email,
       subject: "Password recovery",
-      html: `<b>Hey ${user[0].display_name}! </b><br>To recover your password please use the following link:<br><a href="${link}">${link}</a><br>Thank you!`,
+      html: `<b>Hey ${user[0].display_name}! </b><br>Your recovery token is ${token}<br>To recover your password please use the following link:<br><a href="${link}">${link}</a><br>Thank you!`,
     };
     await transporter.sendMail(mailOptions, (error, info) => {
       if (error) {
@@ -353,15 +371,14 @@ async function forgotPassword(req, res, next) {
 }
 
 async function passwordRecovery(req, res, next) {
-  const token = req.params.token;
   const body = req.body;
   try {
-    if (token) {
+    if (body.token) {
       const user = await sequelize.query(
         "SELECT * from e_vote_user WHERE reset_token = :token;",
         {
           type: QueryTypes.SELECT,
-          replacements: { token: token },
+          replacements: { token: body.token },
         }
       );
       if (user.length === 0) {
@@ -372,7 +389,7 @@ async function passwordRecovery(req, res, next) {
         type: QueryTypes.SELECT,
         replacements: {
           password: password,
-          token: token,
+          token: body.token,
         },
       });
       return res.status(200).json(1);
@@ -704,7 +721,6 @@ async function showUsers(req, res, next) {
   }
 }
 
-// DONE
 async function changePermissions(req, res, next) {
   const id = req.params.id; // id of user in which permissions will be changed
   const token = req.cookies.token;
@@ -776,13 +792,29 @@ async function regenerateKeys(req, res, next) {
   try {
     const kmsConn = await kms.kmsConnection();
     if (kmsConn) {
-      const keyPair = encryption.generateSignatureKeys(body.key);
+      const communicationId = uuid.v4();
+      const ecdh = encryption.generateECDHKeys();
+      const publicKey = await kms.createCommunication(communicationId);
+      const secret = encryption.createSecret(publicKey.public, ecdh.cipher);
+      const sign_ext = crypto.pbkdf2Sync(
+        body.key,
+        "salt",
+        100000,
+        22,
+        "sha256"
+      );
+      const keyPair = encryption.generateSignatureKeys(
+        sign_ext.toString("base64")
+      );
       const key = await kms.updateSignatureKeys(
         userId,
         keyPair.publicKey,
         keyPair.privateKey,
         keyPair.iv,
-        keyPair.tag
+        keyPair.tag,
+        secret,
+        ecdh.public,
+        communicationId
       );
       if (key.status === 200) {
         return res.status(200).json(1);
@@ -1028,13 +1060,13 @@ async function bulkRegister(req, res, next) {
     }
     await transaction.commit();
     for (const genUser of generatedUser) {
-      const link = `${process.env.FRONTEND_URI}/register-confirm?token=${genUser.activation_token}`;
+      const link = `${process.env.FRONTEND_URI}/register-confirm`;
       const mailOptions = {
         from: "UAlg Secure Vote",
         to: genUser.email,
         subject: "Register",
         text: "Thank you for registering in UAlg secure vote",
-        html: `<b>Hey ${genUser.email}! </b><br> Thank you for registering in UAlg secure vote<br>Please use the following link to complete your registration:<br><a href="${link}">${link}</a>`,
+        html: `<b>Hey ${genUser.email}! </b><br> Thank you for registering in UAlg secure vote<br>Your verification token is ${genUser.activation_token}<br>Please use the following link to complete your registration:<br><a href="${link}">${link}</a>`,
       };
       await transporter.sendMail(mailOptions, (error, info) => {
         if (error) {
@@ -1057,7 +1089,6 @@ async function bulkRegister(req, res, next) {
 }
 
 async function partialRegister(req, res, next) {
-  const token = req.params.token;
   const body = req.body;
   let image = req.file ? req.file.filename : null;
   try {
@@ -1066,7 +1097,7 @@ async function partialRegister(req, res, next) {
       {
         type: QueryTypes.SELECT,
         replacements: {
-          token: token,
+          token: body.token,
         },
       }
     );
@@ -1075,14 +1106,30 @@ async function partialRegister(req, res, next) {
     }
     const kmsConn = await kms.kmsConnection();
     if (kmsConn) {
-      const keys = encryption.generateSignatureKeys(body.sign_key);
+      const communicationId = uuid.v4();
+      const ecdh = encryption.generateECDHKeys();
+      const publicKey = await kms.createCommunication(communicationId);
+      const secret = encryption.createSecret(publicKey.public, ecdh.cipher);
+      const sign_ext = crypto.pbkdf2Sync(
+        body.sign_key,
+        "salt",
+        100000,
+        22,
+        "sha256"
+      );
+      const keys = encryption.generateSignatureKeys(
+        sign_ext.toString("base64")
+      );
       const password = await bcrypt.hash(body.password, 13);
       const key = await kms.insertSignature(
         user[0].id,
         keys.publicKey,
         keys.privateKey,
         keys.iv,
-        keys.tag
+        keys.tag,
+        secret,
+        ecdh.public,
+        communicationId
       );
       if (key.status !== 201) {
         if (key.status === 400) {
@@ -1126,7 +1173,7 @@ async function partialRegister(req, res, next) {
             displayName: body.display_name,
             password: password,
             image: image,
-            token: token,
+            token: body.token,
           },
         }
       );
@@ -1146,7 +1193,7 @@ async function partialRegister(req, res, next) {
     }
   } catch (err) {
     await logger.insertSystemLog(
-      "/users/register/:token",
+      "/users/register",
       err.message,
       err.stack,
       "PATCH"

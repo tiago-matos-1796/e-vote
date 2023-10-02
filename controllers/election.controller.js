@@ -12,6 +12,7 @@ const fs = require("fs");
 const sharp = require("sharp");
 const logger = require("../utils/log.utils");
 const sanitizeImage = require("sanitize-filename");
+const crypto = require("crypto");
 
 async function listByVoter(req, res, next) {
   const token = req.cookies.token;
@@ -139,7 +140,12 @@ async function showBallot(req, res, next) {
     );
     const kmsConn = await kms.kmsConnection();
     if (kmsConn) {
-      const electionPublicKey = await kms.getElectionPublicKey(id);
+      const ecdh = encryption.generateECDHKeys();
+      const electionPublicKey = await kms.getElectionPublicKey(
+        id,
+        ecdh.public,
+        ecdh.cipher
+      );
       const candidates = election.map(function (item) {
         return { id: item.id, name: item.name, image: item.image };
       });
@@ -277,7 +283,8 @@ async function create(req, res, next) {
   }
   const transaction = await sequelize.transaction();
   try {
-    const keyPair = encryption.generateKeys(body.key);
+    const key_ext = crypto.pbkdf2Sync(body.key, "salt", 100000, 22, "sha256");
+    const keyPair = encryption.generateKeys(key_ext.toString("base64"));
     const electionId = uuid.v1();
     await sequelize.query(
       "CALL insert_election (:id, :title, :start_date, :end_date, :created_at);",
@@ -315,12 +322,19 @@ async function create(req, res, next) {
       }
       return res.status(500).send("An error has occurred");
     }
+    const communicationId = uuid.v4();
+    const ecdh = encryption.generateECDHKeys();
+    const publicKey = await kms.createCommunication(communicationId);
+    const secret = encryption.createSecret(publicKey.public, ecdh.cipher);
     await kms.insertElectionKeys(
       electionId,
       keyPair.publicKey,
       keyPair.privateKey,
       keyPair.iv,
-      keyPair.tag
+      keyPair.tag,
+      secret,
+      ecdh.public,
+      communicationId
     );
     await sequelize.query("CALL insert_manager (:user_id, :election_id);", {
       replacements: { user_id: userId, election_id: electionId },
@@ -765,13 +779,21 @@ async function regenerateKeys(req, res, next) {
     }
     const kmsConn = await kms.kmsConnection();
     if (kmsConn) {
-      const keyPair = encryption.generateKeys(body.key);
+      const communicationId = uuid.v4();
+      const ecdh = encryption.generateECDHKeys();
+      const publicKey = await kms.createCommunication(communicationId);
+      const secret = encryption.createSecret(publicKey.public, ecdh.cipher);
+      const key_ext = crypto.pbkdf2Sync(body.key, "salt", 100000, 22, "sha256");
+      const keyPair = encryption.generateKeys(key_ext.toString("base64"));
       await kms.updateElectionKeys(
         id,
         keyPair.publicKey,
         keyPair.privateKey,
         keyPair.iv,
-        keyPair.tag
+        keyPair.tag,
+        secret,
+        ecdh.public,
+        communicationId
       );
       await logger.insertElectionLog(
         id,
@@ -808,15 +830,21 @@ async function createSignature(req, res, next) {
   try {
     const kmsConn = await kms.kmsConnection();
     if (kmsConn) {
-      const signaturePrivateKey = await kms.getSignaturePrivateKey(userId);
+      const ecdh = encryption.generateECDHKeys();
+      const signaturePrivateKey = await kms.getSignaturePrivateKey(
+        userId,
+        ecdh.public,
+        ecdh.cipher
+      );
+      const key_ext = crypto.pbkdf2Sync(body.key, "salt", 100000, 22, "sha256");
       const signature = encryption.sign(
         Buffer.from(body.data),
         signaturePrivateKey.key,
-        body.key,
+        key_ext.toString("base64"),
         signaturePrivateKey.iv,
         signaturePrivateKey.tag
       );
-      const hash = encryption.createHash(body.data, body.key);
+      const hash = encryption.createHash(body.data, key_ext.toString("base64"));
       return res.status(200).json({ signature: signature, hash: hash });
     } else {
       return res.status(400).send("An error has occurred");
