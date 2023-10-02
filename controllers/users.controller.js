@@ -122,7 +122,7 @@ async function register(req, res, next) {
       const secret = encryption.createSecret(publicKey.public, ecdh.cipher);
       const sign_ext = crypto.pbkdf2Sync(
         body.sign_key,
-        "salt",
+        "df1w2d3j4d77ae66e9c5a6c3d8f921b7",
         100000,
         22,
         "sha256"
@@ -798,7 +798,7 @@ async function regenerateKeys(req, res, next) {
       const secret = encryption.createSecret(publicKey.public, ecdh.cipher);
       const sign_ext = crypto.pbkdf2Sync(
         body.key,
-        "salt",
+        "df1w2d3j4d77ae66e9c5a6c3d8f921b7",
         100000,
         22,
         "sha256"
@@ -1112,7 +1112,7 @@ async function partialRegister(req, res, next) {
       const secret = encryption.createSecret(publicKey.public, ecdh.cipher);
       const sign_ext = crypto.pbkdf2Sync(
         body.sign_key,
-        "salt",
+        "df1w2d3j4d77ae66e9c5a6c3d8f921b7",
         100000,
         22,
         "sha256"
