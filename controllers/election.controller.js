@@ -283,12 +283,10 @@ async function create(req, res, next) {
   }
   const transaction = await sequelize.transaction();
   try {
-    const key_ext = crypto.pbkdf2Sync(
+    const key_ext = crypto.scryptSync(
       body.key,
       "df1w2d3j4d77ae66e9c5a6c3d8f921b7",
-      100000,
-      22,
-      "sha256"
+      22
     );
     const keyPair = encryption.generateKeys(key_ext.toString("base64"));
     const electionId = uuid.v1();
@@ -789,12 +787,10 @@ async function regenerateKeys(req, res, next) {
       const ecdh = encryption.generateECDHKeys();
       const publicKey = await kms.createCommunication(communicationId);
       const secret = encryption.createSecret(publicKey.public, ecdh.cipher);
-      const key_ext = crypto.pbkdf2Sync(
+      const key_ext = crypto.scryptSync(
         body.key,
         "df1w2d3j4d77ae66e9c5a6c3d8f921b7",
-        100000,
-        22,
-        "sha256"
+        22
       );
       const keyPair = encryption.generateKeys(key_ext.toString("base64"));
       await kms.updateElectionKeys(
@@ -848,12 +844,10 @@ async function createSignature(req, res, next) {
         ecdh.public,
         ecdh.cipher
       );
-      const key_ext = crypto.pbkdf2Sync(
+      const key_ext = crypto.scryptSync(
         body.key,
         "df1w2d3j4d77ae66e9c5a6c3d8f921b7",
-        100000,
-        22,
-        "sha256"
+        22
       );
       const signature = encryption.sign(
         Buffer.from(body.data),

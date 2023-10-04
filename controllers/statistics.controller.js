@@ -30,12 +30,10 @@ async function vote(req, res, next) {
     return next(createError(400, `id ${id} cannot be validated`));
   }
   try {
-    const key_ext = crypto.pbkdf2Sync(
+    const key_ext = crypto.scryptSync(
       body.key,
       "df1w2d3j4d77ae66e9c5a6c3d8f921b7",
-      100000,
-      22,
-      "sha256"
+      22
     );
     const hash = encryption.createHash(body.vote, key_ext.toString("base64"));
     const election = await sequelize.query(
@@ -230,12 +228,10 @@ async function countVotes(req, res, next) {
       ecdh.public,
       ecdh.cipher
     );
-    const key_ext = crypto.pbkdf2Sync(
+    const key_ext = crypto.scryptSync(
       body.key,
       "df1w2d3j4d77ae66e9c5a6c3d8f921b7",
-      100000,
-      22,
-      "sha256"
+      22
     );
     const decryptedVotes = [];
     for (const vote of votes.rows) {

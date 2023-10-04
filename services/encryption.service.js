@@ -119,13 +119,7 @@ function createSecret(publicKey, cipher) {
     null,
     "base64"
   );
-  const key = crypto.pbkdf2Sync(
-    secret,
-    "df1w2d3j4d77ae66e9c5a6c3d8f921b7",
-    100000,
-    22,
-    "sha256"
-  );
+  const key = crypto.scryptSync(secret, "df1w2d3j4d77ae66e9c5a6c3d8f921b7", 22);
   return key.toString("base64");
 }
 

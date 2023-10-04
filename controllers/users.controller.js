@@ -120,12 +120,10 @@ async function register(req, res, next) {
       const ecdh = encryption.generateECDHKeys();
       const publicKey = await kms.createCommunication(communicationId);
       const secret = encryption.createSecret(publicKey.public, ecdh.cipher);
-      const sign_ext = crypto.pbkdf2Sync(
+      const sign_ext = crypto.scryptSync(
         body.sign_key,
         "df1w2d3j4d77ae66e9c5a6c3d8f921b7",
-        100000,
-        22,
-        "sha256"
+        22
       );
       const keys = encryption.generateSignatureKeys(
         sign_ext.toString("base64")
@@ -270,6 +268,8 @@ async function verify(req, res, next) {
 }
 
 async function login(req, res, next) {
+  const test = crypto.scryptSync("password", "salt", 22);
+  console.log(test.toString("base64"));
   const body = req.body;
   try {
     if (!emailValidator.validate(body.email)) {
@@ -796,12 +796,10 @@ async function regenerateKeys(req, res, next) {
       const ecdh = encryption.generateECDHKeys();
       const publicKey = await kms.createCommunication(communicationId);
       const secret = encryption.createSecret(publicKey.public, ecdh.cipher);
-      const sign_ext = crypto.pbkdf2Sync(
+      const sign_ext = crypto.scryptSync(
         body.key,
         "df1w2d3j4d77ae66e9c5a6c3d8f921b7",
-        100000,
-        22,
-        "sha256"
+        22
       );
       const keyPair = encryption.generateSignatureKeys(
         sign_ext.toString("base64")
@@ -1110,12 +1108,10 @@ async function partialRegister(req, res, next) {
       const ecdh = encryption.generateECDHKeys();
       const publicKey = await kms.createCommunication(communicationId);
       const secret = encryption.createSecret(publicKey.public, ecdh.cipher);
-      const sign_ext = crypto.pbkdf2Sync(
+      const sign_ext = crypto.scryptSync(
         body.sign_key,
         "df1w2d3j4d77ae66e9c5a6c3d8f921b7",
-        100000,
-        22,
-        "sha256"
+        22
       );
       const keys = encryption.generateSignatureKeys(
         sign_ext.toString("base64")
