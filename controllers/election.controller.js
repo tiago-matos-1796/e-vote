@@ -849,6 +849,11 @@ async function createSignature(req, res, next) {
         "df1w2d3j4d77ae66e9c5a6c3d8f921b7",
         22
       );
+      const hmac_secret = crypto.scryptSync(
+        body.key,
+        "5f1w2d2j4d77bg66e9c5a6y3d8f901b7",
+        64
+      );
       const signature = encryption.sign(
         Buffer.from(body.data),
         signaturePrivateKey.key,
@@ -856,7 +861,10 @@ async function createSignature(req, res, next) {
         signaturePrivateKey.iv,
         signaturePrivateKey.tag
       );
-      const hash = encryption.createHash(body.data, key_ext.toString("base64"));
+      const hash = encryption.createHash(
+        body.data,
+        hmac_secret.toString("base64")
+      );
       return res.status(200).json({ signature: signature, hash: hash });
     } else {
       return res.status(400).send("An error has occurred");

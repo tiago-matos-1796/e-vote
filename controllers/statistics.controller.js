@@ -30,12 +30,15 @@ async function vote(req, res, next) {
     return next(createError(400, `id ${id} cannot be validated`));
   }
   try {
-    const key_ext = crypto.scryptSync(
+    const hmac_secret = crypto.scryptSync(
       body.key,
-      "df1w2d3j4d77ae66e9c5a6c3d8f921b7",
-      22
+      "5f1w2d2j4d77bg66e9c5a6y3d8f901b7",
+      64
     );
-    const hash = encryption.createHash(body.vote, key_ext.toString("base64"));
+    const hash = encryption.createHash(
+      body.vote,
+      hmac_secret.toString("base64")
+    );
     const election = await sequelize.query(
       "SELECT * from e_vote_election WHERE id = :id",
       {
