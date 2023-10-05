@@ -19,7 +19,13 @@ module.exports = (app) => {
     cors({
       origin: process.env.FRONTEND_URI,
       methods: ["GET", "PUT", "PATCH", "POST", "DELETE"],
-      allowedHeaders: ["Origin", "X-Requested-With", "Content-Type", "Accept"],
+      allowedHeaders: [
+        "Origin",
+        "X-Requested-With",
+        "Content-Type",
+        "Accept",
+        "SESSION-TOKEN",
+      ],
       credentials: true,
       maxAge: 31536000,
       preflightContinue: true,

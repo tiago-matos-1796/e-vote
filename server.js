@@ -1,7 +1,6 @@
 const express = require("express");
 const helmet = require("helmet");
 const bodyParser = require("body-parser");
-const cors = require("cors");
 const { client } = require("./configs/cassandra.config");
 const kms = require("./utils/kms.utils");
 const cookieParser = require("cookie-parser");

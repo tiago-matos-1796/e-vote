@@ -5,11 +5,11 @@ function verifyToken(req, res, next) {
   if (!token) {
     return res.status(401).send("Authentication required");
   }
-  try {
-    req.user = jwt.verify(token, process.env.JWT_SECRET);
-  } catch (err) {
-    return res.status(401).send("Invalid Token");
-  }
+  jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
+    if (err) {
+      return res.status(401).send("Invalid Token");
+    }
+  });
   return next();
 }
 

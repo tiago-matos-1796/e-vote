@@ -268,8 +268,6 @@ async function verify(req, res, next) {
 }
 
 async function login(req, res, next) {
-  const test = crypto.scryptSync("password", "salt", 22);
-  console.log(test.toString("base64"));
   const body = req.body;
   try {
     if (!emailValidator.validate(body.email)) {
@@ -482,26 +480,34 @@ async function update(req, res, next) {
     } else {
       imageName = user[0].image;
     }
+    let token = user[0].token;
     if (typeof body.password === "string") {
-      const password =
-        body.password.length > 0
-          ? await bcrypt.hash(body.password, 13)
-          : user[0].password;
+      let password = "";
+      if (body.password.length > 0) {
+        password = await bcrypt.hash(body.password, 13);
+        token = jwt.sign(
+          { id: id, username: user[0].username, iat: Date.now() },
+          config.JWT_SECRET
+        );
+      } else {
+        password = user[0].password;
+      }
       await sequelize.query(
-        "CALL update_user (:id, :display_name, :password, :image);",
+        "CALL update_user (:id, :display_name, :password, :image, :token);",
         {
           replacements: {
             id: id,
             display_name: body.displayName,
             password: password,
             image: imageName,
+            token: token,
           },
         }
       );
     }
     return res
       .status(200)
-      .json({ display_name: body.displayName, image: imageName });
+      .json({ display_name: body.displayName, image: imageName, token: token });
   } catch (err) {
     await logger.insertSystemLog("/users/:id", err.message, err.stack, "PUT");
     return res.status(500).send("An error has occurred");
