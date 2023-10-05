@@ -28,7 +28,6 @@ module.exports = (app) => {
         "Content-Type",
         "Accept",
         "register-token",
-        "SESSION-TOKEN",
       ],
       credentials: true,
       maxAge: 31536000,
