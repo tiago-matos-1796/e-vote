@@ -5,7 +5,6 @@ const kms = require("../utils/kms.utils");
 const encryption = require("../services/encryption.service");
 const { client } = require("../configs/cassandra.config");
 const jwt = require("jsonwebtoken");
-const uuid = require("uuid");
 const createError = require("http-errors");
 const uuidValidator = require("uuid-validate");
 const moment = require("moment");
@@ -13,6 +12,7 @@ const _ = require("lodash");
 const { createReports, submitVote } = require("../utils/svm.utils");
 const logger = require("../utils/log.utils");
 const sanitize = require("sanitize-filename");
+const { transporter } = require("../configs/smtp.config");
 
 async function vote(req, res, next) {
   const id = req.params.id;
@@ -120,12 +120,32 @@ async function vote(req, res, next) {
       `${decodedToken.username} submitted vote`,
       "NONE"
     );
+    const voteDate = moment().format("DD-MM-YYYY HH:mm");
     await sequelize.query("CALL vote_submission (:voter, :election, :time);", {
       replacements: {
         voter: decodedToken.id,
         election: id,
-        time: moment().format("DD-MM-YYYY HH:mm"),
+        time: voteDate,
       },
+    });
+    const user = await sequelize.query(
+      "SELECT * from e_vote_user WHERE id = :id",
+      {
+        type: QueryTypes.SELECT,
+        replacements: { id: decodedToken.id },
+      }
+    );
+    const mailOptions = {
+      from: "UAlg Secure Vote",
+      to: user[0].email,
+      subject: `${election[0].title} - Vote Confirmation`,
+      html: `<b>Hey ${user[0].display_name}!</b><br>Your vote on election ${election[0].title} has been sucessfully cast at ${voteDate}.<br>Thank you for participating in this election!`,
+    };
+    await transporter.sendMail(mailOptions, (error, info) => {
+      if (error) {
+        return console.log(error);
+      }
+      console.log("Message sent: %s", info.messageId);
     });
     return res.status(200).json("Vote submitted with success");
   } catch (err) {
@@ -279,6 +299,51 @@ async function countVotes(req, res, next) {
       }
     );
     await createReports(sanitize(id), voteCount);
+    if (detection) {
+      const auditors = await sequelize.query(
+        "select id, email, display_name from e_vote_user where permission = :permission;",
+        {
+          replacements: { permission: "AUDITOR" },
+          type: QueryTypes.SELECT,
+        }
+      );
+      for (const auditor of auditors) {
+        const mailOptions = {
+          from: "UAlg Secure Vote",
+          to: auditor.email,
+          subject: `${election[0].title} - Possible Fraud`,
+          html: `<b>Hey ${auditor.display_name}!</b><br>A possible fraud has been detected on election ${election[0].title}. An audit is recommended.<br>Thank you!`,
+        };
+        await transporter.sendMail(mailOptions, (error, info) => {
+          if (error) {
+            return console.log(error);
+          }
+          console.log("Message sent: %s", info.messageId);
+        });
+      }
+    } else {
+      const electionVoters = await sequelize.query(
+        "select evu.id, evu.email, evu.display_name from e_vote_election eve join e_vote_voter evv on eve.id = evv.election_id inner join e_vote_user evu on evu.id = evv.user_id where eve.id = :id;",
+        {
+          type: QueryTypes.SELECT,
+          replacements: { id: id },
+        }
+      );
+      for (const voter of electionVoters) {
+        const mailOptions = {
+          from: "UAlg Secure Vote",
+          to: voter.email,
+          subject: `${election[0].title} - Election Results`,
+          html: `<b>Hey ${voter.display_name}!</b><br>The results of election ${election[0].title} are now available. You may view them on Secure Vote's platform.<br>Thank you!`,
+        };
+        await transporter.sendMail(mailOptions, (error, info) => {
+          if (error) {
+            return console.log(error);
+          }
+          console.log("Message sent: %s", info.messageId);
+        });
+      }
+    }
     return res
       .status(200)
       .json({ message: "Counted with success", detection: detection });

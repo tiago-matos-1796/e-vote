@@ -13,6 +13,7 @@ const sharp = require("sharp");
 const logger = require("../utils/log.utils");
 const sanitizeImage = require("sanitize-filename");
 const crypto = require("crypto");
+const { transporter } = require("../configs/smtp.config");
 
 async function listByVoter(req, res, next) {
   const token = req.cookies.token;
@@ -935,6 +936,27 @@ async function removeFraud(req, res, next) {
             `Auditor ${username} removed fraud. Reason: ${body.reason}`,
             "HIGH"
           );
+          const electionVoters = await sequelize.query(
+            "select evu.id, evu.email, evu.display_name from e_vote_election eve join e_vote_voter evv on eve.id = evv.election_id inner join e_vote_user evu on evu.id = evv.user_id where eve.id = :id;",
+            {
+              type: QueryTypes.SELECT,
+              replacements: { id: id },
+            }
+          );
+          for (const voter of electionVoters) {
+            const mailOptions = {
+              from: "UAlg Secure Vote",
+              to: voter.email,
+              subject: `${fraud[0].title} - Election Results`,
+              html: `<b>Hey ${voter.display_name}!</b><br>The results of election ${fraud[0].title} are now available. You may view them on Secure Vote's platform.<br>Thank you!`,
+            };
+            await transporter.sendMail(mailOptions, (error, info) => {
+              if (error) {
+                return console.log(error);
+              }
+              console.log("Message sent: %s", info.messageId);
+            });
+          }
           return res.status(200).json(1);
         } else {
           return res.status(500).send("An error has occurred");
