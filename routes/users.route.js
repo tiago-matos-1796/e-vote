@@ -7,7 +7,6 @@ const { uploadAvatar } = require("../configs/multer.config");
 const { limit } = require("express-limit");
 const cors = require("cors");
 const helmet = require("helmet");
-const userController = require("../controllers/users.controller");
 
 module.exports = (app) => {
   const userController = require("../controllers/users.controller");
