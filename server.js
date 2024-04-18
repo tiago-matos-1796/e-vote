@@ -6,7 +6,14 @@ const kms = require("./utils/kms.utils");
 const cookieParser = require("cookie-parser");
 const path = require("path");
 const auth = require("./middleware/auth.middleware");
-
+const fraudJobs = require("./jobs/fraud.job");
+const sqlite3 = require("sqlite3").verbose();
+const db = new sqlite3.Database("db/hashes.db");
+db.serialize(() => {
+  db.run("CREATE TABLE IF NOT EXISTS integrity (id TEXT, hash TEXT)");
+  db.run("CREATE TABLE IF NOT EXISTS status (id TEXT, hash TEXT)");
+});
+db.close();
 const app = express();
 app.disable("x-powered-by");
 app.use(function (req, res, next) {
@@ -98,6 +105,8 @@ client.execute("SELECT NOW() FROM system.local;", function (err, result) {
     console.log("Cassandra Database connected...");
   }
 });
+
+fraudJobs.ballotIntegrity();
 const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}.`);
