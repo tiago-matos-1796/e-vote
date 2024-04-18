@@ -14,6 +14,8 @@ const logger = require("../utils/log.utils");
 const sanitizeImage = require("sanitize-filename");
 const crypto = require("crypto");
 const { transporter } = require("../configs/smtp.config");
+const { createHash } = require("crypto");
+const hashes = require("../configs/sqlite.config").db;
 
 async function listByVoter(req, res, next) {
   const token = req.cookies.token;
@@ -407,6 +409,13 @@ async function create(req, res, next) {
       `Election ${body.title} with ID: ${electionId} has been created by user ${username}`,
       "NONE"
     );
+    const hash = createHash("sha256")
+      .update(JSON.stringify([]))
+      .digest("base64");
+    const statusHash = hashes.prepare(
+      "INSERT INTO status(id, hash) VALUES (?, ?)"
+    );
+    statusHash.run(electionId, hash);
     return res.status(200).json(body);
   } catch (err) {
     await transaction.rollback();
@@ -738,6 +747,8 @@ async function remove(req, res, next) {
       "NONE"
     );
     await transaction.commit();
+    const stmt = hashes.prepare("DELETE FROM status WHERE id = ?");
+    stmt.run(id);
     return res.status(200).json(1);
   } catch (err) {
     await transaction.rollback();

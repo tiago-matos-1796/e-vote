@@ -13,12 +13,14 @@ const { createReports, submitVote } = require("../utils/svm.utils");
 const logger = require("../utils/log.utils");
 const sanitize = require("sanitize-filename");
 const { transporter } = require("../configs/smtp.config");
-
+const { createHash } = require("crypto");
+const hashes = require("../configs/sqlite.config").db;
 async function vote(req, res, next) {
   const id = req.params.id;
   const body = req.body;
   const token = req.cookies.token;
   let decodedToken = "";
+  let detection = false;
   jwt.verify(token, process.env.JWT_SECRET, {}, function (err, decoded) {
     if (err) {
       return next(createError(401, "Invalid Token"));
@@ -113,7 +115,77 @@ async function vote(req, res, next) {
       );
       return next(createError(400, `Signature could not be validated`));
     }
+    const statusQuery =
+      "SELECT vote FROM votes WHERE election_id = :id ALLOW FILTERING";
+    const statusParams = { id: id };
+    const electionStatus = await client.execute(statusQuery, statusParams, {
+      prepare: true,
+    });
+    const currentStatus = createHash("sha256")
+      .update(JSON.stringify(electionStatus.rows))
+      .digest("base64");
+    const lastStatus = hashes
+      .prepare("SELECT * FROM status WHERE id = ?")
+      .get(id);
+    if (currentStatus !== lastStatus.hash) {
+      await logger.insertElectionLog(
+        id,
+        election[0].title,
+        `Ballot box has been tampered; Current status ${currentStatus} does not match last status ${lastStatus.hash}`,
+        "HIGH"
+      );
+      const auditors = await sequelize.query(
+        "select email, display_name from e_vote_user where permission = :permission",
+        {
+          type: QueryTypes.SELECT,
+          replacements: { permission: "AUDITOR" },
+        }
+      );
+      for (const auditor of auditors[0]) {
+        const auditMailOptions = {
+          from: "UAlg Secure Vote",
+          to: auditor.email,
+          subject: `${election[0].title} - Fraud detected`,
+          html: `<b>Hey ${
+            auditor.display_name
+          }!</b><br>Fraud has been detected on election ${
+            election[0].title
+          } at ${moment().format(
+            "DD-MM-YYYY HH:mm"
+          )}.<br>Last ballot box hash: ${lastStatus}<br>Current ballot box hash: ${currentStatus}<br>Recommend an audit should be performed as soon as possible`,
+        };
+        await transporter.sendMail(auditMailOptions, (error, info) => {
+          if (error) {
+            return console.log(error);
+          }
+          console.log("Message sent: %s", info.messageId);
+        });
+      }
+      await sequelize.query("CALL insert_fraud (:election);", {
+        replacements: { election: id },
+      });
+      detection = true;
+    }
     await submitVote(id, body.vote);
+    if (!detection) {
+      const currentStatusQuery =
+        "SELECT vote FROM votes WHERE election_id = :id ALLOW FILTERING";
+      const currentStatusParams = { id: id };
+      const newElectionStatus = await client.execute(
+        currentStatusQuery,
+        currentStatusParams,
+        {
+          prepare: true,
+        }
+      );
+      const newStatus = createHash("sha256")
+        .update(JSON.stringify(newElectionStatus.rows))
+        .digest("base64");
+      const updateStatus = hashes.prepare(
+        "UPDATE status SET hash = ? WHERE id = ?"
+      );
+      updateStatus.run(newStatus, id);
+    }
     await logger.insertElectionLog(
       id,
       election[0].title,
@@ -232,6 +304,21 @@ async function countVotes(req, res, next) {
         id,
         election[0].title,
         `Recorded votes do not match the amount of votes submitted by voters`,
+        "HIGH"
+      );
+    }
+    const hash = createHash("sha256")
+      .update(JSON.stringify(votes.rows))
+      .digest("base64");
+    const integrityHash = hashes
+      .prepare("SELECT * FROM integrity WHERE id = ?")
+      .get(id);
+    if (hash !== integrityHash.hash) {
+      detection = true;
+      await logger.insertElectionLog(
+        id,
+        election[0].title,
+        `Ballot box has been tampered; Expected hash ${integrityHash.hash} is ${hash}`,
         "HIGH"
       );
     }
