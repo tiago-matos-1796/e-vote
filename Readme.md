@@ -50,6 +50,8 @@ If AES mode is changed, change or add lines accordingly.
 
 If KMS_URI and/or FRONTEND_URI are not set several endpoints will not work properly and content will not be shown on any application that calls Secure Vote's endpoints.
 
+If you choose not to use the frontend application designed for this API please see **ElectionBallot.vue** component to see how vote encryption is performed.
+
 ## Installation
 
 Use the package manager [npm](https://www.npmjs.com) to install Secure Vote dependencies.
