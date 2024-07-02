@@ -51,7 +51,7 @@
     "sanitize-filename": "^1.6.3",
     "sequelize": "^6.31.0",
     "sharp": "^0.32.1",
-    "tmp": "^0.2.1",
+    "tmp": "^0.2.2",
     "uuid": "^9.0.0",
     "uuid-validate": "^0.0.3",
     "xss": "^1.0.14"
